@@ -1,0 +1,15 @@
+name: Native common tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Configure shared behavior tests
+        run: cmake -S . -B build/native -DOSG_TEST_USB_DESCRIPTORS=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Build and test
+        run: |
+          cmake --build build/native --parallel
+          ctest --test-dir build/native --output-on-failure

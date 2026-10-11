@@ -1,40 +1,39 @@
 # OpenSimGear firmware common
 
-Reusable C firmware implementation for OpenSimGear modules and gateway firmware. Shared protocol definitions live in the separate [protocol](https://github.com/opensimgear/protocol) repository.
+Reusable C support for device firmware. Shared application protocol definitions remain in [protocol](https://github.com/opensimgear/protocol); physical pins, control profiles and USB product identity stay in each device repository.
 
-## Status and ownership
+## Implemented starter support
 
-Repository scaffold initialized; reusable implementations and validated build targets are not yet present.
+- `osg_core`: debounced button state with release-to-rearm and a bounded LF/CRLF diagnostic line parser.
+- `osg_usb`: HID + CDC configuration and composite-device descriptor helpers. This is an opt-in starter layout, not a universal report imposed on products.
+- `osg_tinyusb`: STM32G0 USB device stack.
+- `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency.
+- Central full-commit pins for TinyUSB, STM32G0 HAL/CMSIS, CMSIS Core, libcanard and protocol.
 
-- include/opensimgear/: public C interfaces.
-- src/usb/: descriptor builders and HID/CDC behavior.
-- src/can/: Cyphal transport, discovery, and common routing mechanisms.
-- src/inputs/: debouncing, release-to-rearm behavior, encoder queues, and recovery handling.
-- src/outputs/: ownership, freshness, and output failure handling.
-- src/config/: version/compatibility checks, one-writer sessions, and interrupted-write protection.
-- src/diagnostics/: health and diagnostic mechanisms.
-- ports/: optional validated platform bindings.
-- cmake/: shared build integration and dependency ownership.
-- tests/: observable behavior and protocol conformance tests as implementation arrives.
+The [device template](https://github.com/opensimgear/device-template) supplies the real STM32G0B1CBT6 board target. Compile/host tests do not establish hardware validation. Discovery, application Cyphal transfers, encoder queues, output ownership, persistence, production configuration and update behavior remain future work.
 
-Device repositories retain pin maps, board targets, capability/control profiles, USB product identity, and device-specific policies. This repository must not impose one descriptor or pinout on every device.
+## Native tests
 
-## Dependencies
+CMake 3.24+, a native C compiler and Git are required. USB descriptor tests fetch pinned upstream sources for headers; core-only tests need no external dependencies.
 
-The planned firmware baseline uses C, TinyUSB, and libcanard. Add exact tested protocol/TinyUSB/libcanard revisions in one central dependency configuration during integration. Device firmware pins this repository to a full commit and can explicitly override it with a local checkout for development. Do not copy shared sources or maintain competing dependency pins.
+```sh
+cmake -S . -B build/native -DOSG_TEST_USB_DESCRIPTORS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build/native
+ctest --test-dir build/native --output-on-failure
+```
 
-## Validation and releases
+Assertions remain enabled in Release builds. Tests exercise debouncing, held-contact recovery, time wraparound, bounded line/overflow recovery and exported USB descriptors (composite interfaces, endpoints, length, caller-supplied identity and report length). Omit `OSG_TEST_USB_DESCRIPTORS` for core-only tests.
 
-Test observable inputs, outputs, and side effects. Once device targets exist, validate candidate common-code changes against known device baselines by overriding their common dependency with the candidate revision. Release compatibility information without implying hardware validation from compilation alone.
+## Embedded integration
 
-## Related repositories
+A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `OSG_USB_CONFIG_DIR` to its directory containing `tusb_config.h`, then links selected libraries. The STM32G0 USB target defines `STM32G0B1xx`; this port is not automatically usable by other MCUs or the undecided gateway platform. Header-only CMSIS and HAL source directory variables are exported to the device's parent build so its board can select HAL modules.
 
-- [Protocol](https://github.com/opensimgear/protocol): shared definitions and compatibility rules.
-- [Firmware common](https://github.com/opensimgear/firmware-common): reusable C implementation.
-- [Device template](https://github.com/opensimgear/device-template): new-device scaffold with planned hello-world firmware and starter KiCad board.
-- [Cockpit](https://github.com/opensimgear/cockpit): desktop configuration application.
-- [Website](https://github.com/opensimgear/opensimgear.github.io): system architecture and user documentation.
+`osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_hid_cdc_configuration()` returns the bytes written, or zero without writing if capacity is insufficient. It uses one CDC control/data pair and one HID interface; products needing another topology should add a separate helper rather than change every device implicitly.
+
+`osg_button_rearm()` blocks presses until a stable release; call it at startup and transport recovery. `osg_button_update()` accepts monotonic millisecond ticks with unsigned wraparound and returns current debounced pressed state. `osg_line_init()` requires a valid caller-owned buffer when capacity is nonzero; READY text remains valid until the next accepted byte. Overflow/NUL input is rejected through the next newline. CR is ignored for the diagnostic console. These are not production protocol framing APIs.
+
+Do not copy shared sources into device repositories or maintain competing dependency pins. Use `FETCHCONTENT_SOURCE_DIR_FIRMWARE_COMMON` on a device build to test a candidate checkout, then update its full commit pin after review. Build changes against known device targets before release.
 
 ## Licensing
 
-License selection is pending. No license grant is implied by this scaffold. Firmware, mechanical design, and electronics will each need documented license coverage before releases and any public USB identifier application.
+OpenSimGear license selection remains pending; no grant is implied for newly authored code. Fetched third-party sources retain their upstream notices, collected in [THIRD_PARTY.md](THIRD_PARTY.md). Include appropriate notices with any future binary distribution.
