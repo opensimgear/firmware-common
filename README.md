@@ -7,10 +7,12 @@ Reusable C support for device firmware. Shared application protocol definitions 
 - `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion.
 - `osg_usb`: HID + CDC configuration and composite-device descriptor helpers. This is an opt-in starter layout, not a universal report imposed on products.
 - `osg_tinyusb`: STM32G0 USB device stack.
-- `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency.
+- `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency; built for future Cyphal integration, with no application Cyphal traffic implemented.
 - Central full-commit pins for TinyUSB, STM32G0 HAL/CMSIS, CMSIS Core, libcanard and protocol.
 
-The [device template](https://github.com/opensimgear/device-template) supplies the real STM32G0B1CBT6 board target. Compile/host tests do not establish hardware validation. Discovery, application Cyphal transfers, output ownership, persistence, production configuration and update behavior remain future work.
+The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 module port and three build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway port. Their private CAN FD v2 discovery, ownership, delivery acknowledgements and flash journals live in those repositories; this library supplies shared acquisition and USB support. The reviewed codec and conformance vectors live in [protocol](https://github.com/opensimgear/protocol).
+
+As of 2026-10-12, shared behavior and descriptor tests pass and both device targets cross-build. Physical STM32 hardware validation remains pending. Application Cyphal transfers, runtime module settings/calibration, output sessions and firmware updates remain future work.
 
 ## Native tests
 
@@ -26,7 +28,7 @@ Assertions remain enabled in Release builds. Tests exercise debouncing, held-con
 
 ## Embedded integration
 
-A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `OSG_USB_CONFIG_DIR` to its directory containing `tusb_config.h`, then links selected libraries. The STM32G0 USB target defines `STM32G0B1xx`; this port is not automatically usable by other MCUs or the undecided gateway platform. Header-only CMSIS and HAL source directory variables are exported to the device's parent build so its board can select HAL modules.
+A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `OSG_USB_CONFIG_DIR` to its directory containing `tusb_config.h`, then links selected libraries. The STM32G0 USB target defines `STM32G0B1xx` and is used by both current module and gateway targets. Other MCU families require an explicit port. Header-only CMSIS and HAL source directory variables are exported to the device's parent build so its board can select HAL modules.
 
 `osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_hid_cdc_configuration()` returns the bytes written, or zero without writing if capacity is insufficient. It uses one CDC control/data pair and one HID interface with a 64-byte input endpoint; products needing another topology should add a separate helper rather than change every device implicitly.
 
@@ -38,7 +40,7 @@ A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `
 
 `osg_button_rearm()` blocks presses until a stable release; call it at startup and transport recovery. `osg_button_update()` accepts monotonic millisecond ticks with unsigned wraparound and returns current debounced pressed state. `osg_line_init()` requires a valid caller-owned buffer when capacity is nonzero; READY text remains valid until the next accepted byte. Overflow/NUL input is rejected through the next newline. CR is ignored for the diagnostic console. These are not production protocol framing APIs.
 
-Do not copy shared sources into device repositories or maintain competing dependency pins. Use `FETCHCONTENT_SOURCE_DIR_FIRMWARE_COMMON` on a device build to test a candidate checkout, then update its full commit pin after review. Build changes against known device targets before release.
+Keep reusable input and USB code here rather than copying it into device repositories or maintaining competing dependency pins. The generic module's documented `shared-gateway` codec/journal snapshot is a separate prototype integration; its codec is checked against the protocol reference and gateway source. Use `FETCHCONTENT_SOURCE_DIR_FIRMWARE_COMMON` on a device build to test a candidate checkout, then update its full commit pin after review. Build changes against known device targets before release.
 
 ## Licensing
 
