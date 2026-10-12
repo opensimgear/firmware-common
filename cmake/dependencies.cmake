@@ -12,6 +12,6 @@ osg_fetch(stm32_hal https://github.com/STMicroelectronics/stm32g0xx-hal-driver.g
 osg_fetch(stm32_cmsis https://github.com/STMicroelectronics/cmsis-device-g0.git 7c77b7cbcee497dfbb5cc08f9562a80515e78013)
 osg_fetch(cmsis_core https://github.com/ARM-software/CMSIS_5.git 55b19837f5703e418ca37894d5745b1dc05e4c91)
 osg_fetch(libcanard https://github.com/OpenCyphal/libcanard.git 120600375535b6a383fbe99a9d77c04b7a65e81a)
-# Protocol source is pinned for future ecosystem integration; hello-world CDC is diagnostic-only.
+# Historical protocol source pin; current device Cyphal snapshots are independently hash-verified.
 osg_fetch(osg_protocol https://github.com/opensimgear/protocol.git 5f72de7e855af67433e0dfcbd8859a7ab606dc6c)
 endif()
