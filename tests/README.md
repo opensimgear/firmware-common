@@ -1,3 +1,5 @@
-# Tests
+# Observable behavior tests
 
-Add host tests for observable behavior and compatibility/conformance fixtures as the implementation arrives. Avoid tests that only mirror internal constants or source structure.
+Build/CTest instructions are in the root README. Core tests exercise contact bounce, held-at-start recovery, new press/release, reconnect and millisecond wraparound; the bounded line parser is tested with normal, oversized and invalid input plus subsequent recovery. Input tests also exercise maintained positions, eight-way hat decoding and conflicts, axis scaling, encoder detent ordering/bounce, stalled report acknowledgements, pulse timing, bounded overflow and recovery. Generic-profile tests verify count/ownership/range limits, axis-only/button-only/hat-only descriptor field omission, shifter conflict/release rearming, cross-bank hat/selector failure, stale axis fallback, acknowledged encoder pulses and queued-event discard. Expansion-driver tests verify all register operations, missing/readback-fault recovery, eight-bank round-robin scanning, independent bank freshness, scan-stop expiry and tick wraparound. Optional USB tests inspect generated descriptor bytes, identities, interface/endpoint uniqueness and buffer failure behavior. Release builds keep assertions enabled.
+
+These host tests do not emulate USB enumeration or measure physical hardware. Device and cable/board validation remains separate.

@@ -1,3 +1,5 @@
-# Shared build integration
+# Dependency ownership
 
-CMake/Ninja/Arm GNU integration and tested protocol/TinyUSB/libcanard commit pins will be added with actual firmware. No dependency lock or working build is provided by the scaffold.
+`dependencies.cmake` owns exact upstream commit pins. Device projects pin firmware-common and select this support with `OSG_EMBEDDED`; they do not repeat TinyUSB/libcanard/HAL pins. FetchContent local source overrides support development and offline builds from prepared checkouts. Dependencies are fetched without their test submodules or upstream build scripts.
+
+Pin changes require shared native tests plus a cross-build of known device targets. libcanard's bundled cavl2 header is part of its pinned source. No generated protocol wire code is present yet.
