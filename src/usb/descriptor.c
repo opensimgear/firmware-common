@@ -15,7 +15,7 @@ size_t osg_usb_hid_cdc_configuration(uint8_t *buffer, size_t capacity, uint16_t 
     const uint8_t descriptor[] = {
         TUD_CONFIG_DESCRIPTOR(1, 3, 0, TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN, 0, 100),
         TUD_CDC_DESCRIPTOR(0, 4, 0x81, 8, 0x02, 0x82, 64),
-        TUD_HID_DESCRIPTOR(2, 5, HID_ITF_PROTOCOL_NONE, report_length, 0x83, 8, 1)
+        TUD_HID_DESCRIPTOR(2, 5, HID_ITF_PROTOCOL_NONE, report_length, 0x83, 64, 1)
     };
     if (!buffer || capacity < sizeof(descriptor)) return 0;
     memcpy(buffer, descriptor, sizeof(descriptor));
