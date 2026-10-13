@@ -4,13 +4,13 @@ Reusable C support for device firmware. Shared application protocol definitions 
 
 ## Implemented starter support
 
-- `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion.
+- `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion, plus device-advertised action descriptors, typed validation and command dispatch.
 - `osg_usb`: CDC-only and HID + CDC configuration and composite-device descriptor helpers. Products retain their own HID reports and USB identity.
 - `osg_tinyusb`: STM32G0 USB device stack.
 - `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency, available for transport integration. Current devices link the same pinned implementation through the self-contained `osg_cyphal` snapshot from protocol.
 - Central full-commit pins for TinyUSB, STM32G0 HAL/CMSIS, CMSIS Core, libcanard and protocol.
 
-The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 generic device and three build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway. Both use the shared Cyphal/CAN implementation and generated application DSDL from [protocol](https://github.com/opensimgear/protocol), retaining their identity, ownership, lease and USB delivery rules. This library supplies shared acquisition and USB support.
+The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 generic device and three build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway. Both use the shared Cyphal/CAN implementation and generated application DSDL from [protocol](https://github.com/opensimgear/protocol), retaining their identity, ownership, lease and USB delivery rules. This library supplies shared acquisition, USB and temporary device-action support.
 
 Physical STM32 hardware has not been validated. The device template implements portable runtime module settings/calibration using this library's input and profile helpers. Implementation and qualification work is tracked in the [GitHub project](https://github.com/orgs/opensimgear/projects/2).
 
@@ -19,12 +19,21 @@ Physical STM32 hardware has not been validated. The device template implements p
 CMake 3.24+, a native C compiler and Git are required. USB tests fetch pinned TinyUSB headers and device-stack sources; core-only tests need no external dependencies.
 
 ```sh
-cmake -S . -B build/native -DOSG_TEST_USB_DESCRIPTORS=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build/native
-ctest --test-dir build/native --output-on-failure
+cmake -S . -B .research/native -DOSG_TEST_USB_DESCRIPTORS=ON -DOSG_TEST_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build .research/native
+ctest --test-dir .research/native --output-on-failure
+cmake --build .research/native --target coverage
 ```
 
-Assertions remain enabled in Release builds. Tests exercise debouncing, held-contact recovery, time wraparound, bounded line/overflow recovery, maintained-position debounce, hat conflicts, axis scaling, bounded encoder ordering/overflow/host stalls/recovery, and exported USB descriptors (composite interfaces, endpoints, length, caller-supplied identity, report length and a 64-byte HID endpoint). A native controller stub drives the pinned TinyUSB stack through CDC-only, HID + CDC and CDC-only configurations, checking driver binding/reset and HID readiness/report completion. It does not model the electrical USB bus or Windows controller identity. Generic-profile tests cover ownership/count/range rejection, exact field omission, 8 axes/128 logical buttons/4 hats bounds, startup and conflict release-to-rearm, cross-bank faults, axis freshness, encoder acknowledgements and eight-bank expansion polling/freshness/recovery. Omit `OSG_TEST_USB_DESCRIPTORS` for core-only tests.
+Assertions remain enabled in Release builds. Tests exercise debouncing, held-contact recovery, time wraparound, bounded line/overflow recovery, maintained-position debounce, hat conflicts, axis scaling, bounded encoder ordering/overflow/host stalls/recovery, and exported USB descriptors (composite interfaces, endpoints, length, caller-supplied identity, report length and a 64-byte HID endpoint). A native controller stub drives the pinned TinyUSB stack through CDC-only, HID + CDC and CDC-only configurations, checking driver binding/reset and HID readiness/report completion. It does not model the electrical USB bus or Windows controller identity. Generic-profile tests cover ownership/count/range rejection, exact field omission, 8 axes/128 logical buttons/4 hats bounds, startup and conflict release-to-rearm, cross-bank faults, axis freshness, encoder acknowledgements and eight-bank expansion polling/freshness/recovery. Device-action tests exercise catalogue validation/pagination, enum and signed-integer bounds, RGB, UTF-8/hex string encoding, no-parameter actions, readback, callback failures and rejected invocations without side effects. Omit `OSG_TEST_USB_DESCRIPTORS` for core-only tests. `OSG_TEST_COVERAGE` instruments native GNU/Clang builds; the `coverage` target requires weighted portable-core line coverage strictly above 70%, and CI enforces it. Run CTest before that target. Use a clean build directory after source edits when old coverage profiles have incompatible checksums.
+
+## Device-advertised actions
+
+`opensimgear/actions.h` supplies a bounded immutable action catalogue, callbacks and the shared `action describe <offset>`, `action state`, `action invoke <catalogueRevision> <id> <arguments...>` handler. Devices own stable IDs, labels, endpoint IDs and runtime values. Parameters support boolean, signed bounded integer, symbolic enum, RGB and bounded UTF-8 string values; actions can also have no parameters. Descriptors identify idempotent setters or one-shot operations and whether current software state is readable. The [wire contract](https://github.com/opensimgear/protocol/blob/main/serial/device-actions.md) defines JSON metadata, typed values, framing and routing.
+
+Call `osg_actions_init()` with immutable descriptor storage, a nonzero catalogue revision, an invoke callback and a read callback for readable actions. It rejects duplicate/invalid identifiers, invalid UTF-8, unsupported types, inconsistent bounds and catalogue representations that exceed transport budgets. The product callback applies hardware behavior; this library owns command/type/range validation and bounded JSON serialization. `osg_actions_command()` accepts a full singular `action ...` line and returns false for unrelated commands without writing. Recognized failures return `ok:false` plus an error token. All accepted invocations require a 4096-byte reply buffer before executing; JSON reserves framing room and is at most 4091 bytes.
+
+Devices call the same dispatcher from direct CDC and the routed CAN command handler. Actions require no configuration writer claim, do not write flash or change input/HID ownership, and can be used for online HID-disabled or direct USB devices. Temporary output values reset according to the device's reboot policy. The transport owns identity/boot/lease/epoch checks and duplicate request retention; this library does not infer delivery or retry one-shot operations. Invoke success confirms software application, not an electrical measurement. The current generic board advertises its existing status LED's auto/on/off modes; its native emulator advertises RGB and boolean LED endpoints.
 
 ## Embedded integration
 

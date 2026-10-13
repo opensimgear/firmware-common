@@ -8,8 +8,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Configure shared behavior tests
-        run: cmake -S . -B build/native -DOSG_TEST_USB_DESCRIPTORS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B .research/native -DOSG_TEST_USB_DESCRIPTORS=ON -DOSG_TEST_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release
       - name: Build and test
         run: |
-          cmake --build build/native --parallel
-          ctest --test-dir build/native --output-on-failure
+          cmake --build .research/native --parallel
+          ctest --test-dir .research/native --output-on-failure
+      - name: Require portable core coverage above 70 percent
+        run: cmake --build .research/native --target coverage
