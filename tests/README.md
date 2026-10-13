@@ -22,6 +22,12 @@ The portable core's weighted executable-line coverage must be strictly above
 70%. This includes the action dispatcher and existing acquisition/profile/line
 code; optional TinyUSB sources and electrical behavior are outside this measure.
 GNU gcov is used on Linux, and `xcrun llvm-cov gcov` for Clang on macOS.
+
+`panel_input_events` verifies debounce/rearm, short press/release capture between
+reads, independent encoder detents beyond the HID queue capacity, retained-read
+identity, 16-record paging, 64-record wrap/overflow, stream/cursor/gap rejection,
+sequence exhaustion, maintained/selector/expansion rules and maximum 128-button
+JSON sizing. The portable decoder preserves existing HID acknowledgement tests.
 For a nondefault compiler, set `OSG_GCOV_COMMAND` to its matching gcov tool
 (for example `gcov-15` with `gcc-15`). Reports remain in
 `.research/native/coverage` (or the chosen scratch build directory). CI enables

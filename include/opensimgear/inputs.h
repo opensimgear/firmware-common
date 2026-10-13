@@ -22,6 +22,8 @@ typedef struct {
  * One full four-transition cycle returning to AB 3 represents one detent. */
 void osg_encoder_init(osg_encoder_t *encoder, uint8_t ab);
 void osg_encoder_rearm(osg_encoder_t *encoder, uint8_t ab);
+/* Decode a completed detent without queuing/acknowledging a HID pulse. */
+int8_t osg_encoder_decode(osg_encoder_t *encoder, uint8_t ab);
 void osg_encoder_sample(osg_encoder_t *encoder, uint8_t ab);
 /* -1/0/+1 current direction button. Press and release each require a host
  * completion acknowledgement and at least 25 ms before advancing. */
