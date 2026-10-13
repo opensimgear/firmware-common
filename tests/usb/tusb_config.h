@@ -1,5 +1,7 @@
 #pragma once
 #define CFG_TUSB_MCU OPT_MCU_NONE
+/* Native fake controller has the same endpoint-number bound as STM32 FS. */
+#define TUP_DCD_ENDPOINT_MAX 8
 #define CFG_TUSB_OS OPT_OS_NONE
 #define CFG_TUSB_RHPORT0_MODE (OPT_MODE_DEVICE | OPT_MODE_FULL_SPEED)
 #define CFG_TUD_ENDPOINT0_SIZE 64

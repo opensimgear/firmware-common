@@ -11,6 +11,16 @@ tusb_desc_device_t osg_usb_device_descriptor(uint16_t vid, uint16_t pid, uint16_
         .iSerialNumber = 3, .bNumConfigurations = 1};
 }
 
+size_t osg_usb_cdc_configuration(uint8_t *buffer, size_t capacity) {
+    const uint8_t descriptor[] = {
+        TUD_CONFIG_DESCRIPTOR(1, 2, 0, TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN, 0, 100),
+        TUD_CDC_DESCRIPTOR(0, 4, 0x81, 8, 0x02, 0x82, 64)
+    };
+    if (!buffer || capacity < sizeof(descriptor)) return 0;
+    memcpy(buffer, descriptor, sizeof(descriptor));
+    return sizeof(descriptor);
+}
+
 size_t osg_usb_hid_cdc_configuration(uint8_t *buffer, size_t capacity, uint16_t report_length) {
     const uint8_t descriptor[] = {
         TUD_CONFIG_DESCRIPTOR(1, 3, 0, TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN, 0, 100),
