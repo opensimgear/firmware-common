@@ -12,7 +12,7 @@ Reusable C support for device firmware. Shared application protocol definitions 
 
 The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 generic device and three build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway. Both use the shared Cyphal/CAN implementation and generated application DSDL from [protocol](https://github.com/opensimgear/protocol), retaining their identity, ownership, lease and USB delivery rules. This library supplies shared acquisition and USB support.
 
-Physical STM32 hardware validation remains pending. Runtime module settings/calibration, output sessions and firmware updates remain future work.
+Physical STM32 hardware has not been validated. The device template implements portable runtime module settings/calibration using this library's input and profile helpers. Implementation and qualification work is tracked in the [GitHub project](https://github.com/orgs/opensimgear/projects/2).
 
 ## Native tests
 
@@ -44,4 +44,4 @@ Keep reusable input and USB code here rather than copying it into device reposit
 
 ## Licensing
 
-OpenSimGear license selection remains pending; no grant is implied for newly authored code. Fetched third-party sources retain their upstream notices, collected in [THIRD_PARTY.md](THIRD_PARTY.md). Include appropriate notices with any future binary distribution.
+No OpenSimGear license grant is implied for newly authored code. Fetched third-party sources retain their upstream notices, collected in [THIRD_PARTY.md](THIRD_PARTY.md). Binary distributions require the applicable upstream notices.
