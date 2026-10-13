@@ -52,4 +52,12 @@ if(PROJECT_IS_TOP_LEVEL AND NOT OSG_EMBEDDED AND OSG_TEST_USB_DESCRIPTORS)
   target_compile_features(osg_usb_test PRIVATE c_std_11)
   target_compile_options(osg_usb_test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
   add_test(NAME usb_descriptor_behavior COMMAND osg_usb_test)
+  add_executable(osg_usb_topology_test tests/usb_topology_test.c src/usb/descriptor.c
+    ${tinyusb_SOURCE_DIR}/src/tusb.c ${tinyusb_SOURCE_DIR}/src/common/tusb_fifo.c
+    ${tinyusb_SOURCE_DIR}/src/device/usbd.c ${tinyusb_SOURCE_DIR}/src/class/cdc/cdc_device.c
+    ${tinyusb_SOURCE_DIR}/src/class/hid/hid_device.c)
+  target_include_directories(osg_usb_topology_test PRIVATE include tests/usb ${tinyusb_SOURCE_DIR}/src)
+  target_compile_features(osg_usb_topology_test PRIVATE c_std_11)
+  target_compile_options(osg_usb_topology_test PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+  add_test(NAME usb_topology_behavior COMMAND osg_usb_topology_test)
 endif()

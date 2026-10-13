@@ -5,7 +5,7 @@ Reusable C support for device firmware. Shared application protocol definitions 
 ## Implemented starter support
 
 - `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion.
-- `osg_usb`: HID + CDC configuration and composite-device descriptor helpers. This is an opt-in starter layout, not a universal report imposed on products.
+- `osg_usb`: CDC-only and HID + CDC configuration and composite-device descriptor helpers. Products retain their own HID reports and USB identity.
 - `osg_tinyusb`: STM32G0 USB device stack.
 - `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency, available for transport integration. Current devices link the same pinned implementation through the self-contained `osg_cyphal` snapshot from protocol.
 - Central full-commit pins for TinyUSB, STM32G0 HAL/CMSIS, CMSIS Core, libcanard and protocol.
@@ -16,7 +16,7 @@ Physical STM32 hardware has not been validated. The device template implements p
 
 ## Native tests
 
-CMake 3.24+, a native C compiler and Git are required. USB descriptor tests fetch pinned upstream sources for headers; core-only tests need no external dependencies.
+CMake 3.24+, a native C compiler and Git are required. USB tests fetch pinned TinyUSB headers and device-stack sources; core-only tests need no external dependencies.
 
 ```sh
 cmake -S . -B build/native -DOSG_TEST_USB_DESCRIPTORS=ON -DCMAKE_BUILD_TYPE=Release
@@ -24,13 +24,13 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure
 ```
 
-Assertions remain enabled in Release builds. Tests exercise debouncing, held-contact recovery, time wraparound, bounded line/overflow recovery, maintained-position debounce, hat conflicts, axis scaling, bounded encoder ordering/overflow/host stalls/recovery, and exported USB descriptors (composite interfaces, endpoints, length, caller-supplied identity, report length and a 64-byte HID endpoint). Generic-profile tests cover ownership/count/range rejection, exact field omission, 8 axes/128 logical buttons/4 hats bounds, startup and conflict release-to-rearm, cross-bank faults, axis freshness, encoder acknowledgements and eight-bank expansion polling/freshness/recovery. Omit `OSG_TEST_USB_DESCRIPTORS` for core-only tests.
+Assertions remain enabled in Release builds. Tests exercise debouncing, held-contact recovery, time wraparound, bounded line/overflow recovery, maintained-position debounce, hat conflicts, axis scaling, bounded encoder ordering/overflow/host stalls/recovery, and exported USB descriptors (composite interfaces, endpoints, length, caller-supplied identity, report length and a 64-byte HID endpoint). A native controller stub drives the pinned TinyUSB stack through CDC-only, HID + CDC and CDC-only configurations, checking driver binding/reset and HID readiness/report completion. It does not model the electrical USB bus or Windows controller identity. Generic-profile tests cover ownership/count/range rejection, exact field omission, 8 axes/128 logical buttons/4 hats bounds, startup and conflict release-to-rearm, cross-bank faults, axis freshness, encoder acknowledgements and eight-bank expansion polling/freshness/recovery. Omit `OSG_TEST_USB_DESCRIPTORS` for core-only tests.
 
 ## Embedded integration
 
 A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `OSG_USB_CONFIG_DIR` to its directory containing `tusb_config.h`, then links selected libraries. The STM32G0 USB target defines `STM32G0B1xx` and is used by both current module and gateway targets. Other MCU families require an explicit port. Header-only CMSIS and HAL source directory variables are exported to the device's parent build so its board can select HAL modules.
 
-`osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_hid_cdc_configuration()` returns the bytes written, or zero without writing if capacity is insufficient. It uses one CDC control/data pair and one HID interface with a 64-byte input endpoint; products needing another topology should add a separate helper rather than change every device implicitly.
+`osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_cdc_configuration()` exposes only CDC control/data interfaces 0/1. Gateways use this topology when there are no enabled controllers, so Windows sees the Cockpit console without a placeholder controller. `osg_usb_hid_cdc_configuration()` adds HID interface 2 with a 64-byte input endpoint; its CDC function is identical to the CDC-only topology. Switching configurations retains the gateway's VID, PID, serial string index, CDC interface numbers and endpoint addresses. Both helpers return the bytes written, or zero without writing for a null buffer or insufficient capacity. Standalone devices continue to select HID + CDC with their own report descriptor. Products needing another topology should add a separate helper rather than change every device implicitly.
 
 `opensimgear/inputs.h` supplies maintained-contact debounce (10 ms), eight-way hat mapping (null state 8), clamped unsigned axis scaling and a quadrature encoder queue. The encoder expects one four-transition cycle per detent anchored at both contacts open (`AB=3`). It queues at most 16 waiting events, diagnoses overflow/illegal jumps and waits for actual report completion before starting its 25 ms press/release intervals. Call `osg_encoder_reported()` only after the corresponding report reaches the host, not when it is merely submitted. Rearm on transport recovery to discard old queued events; inspect the counters for diagnostics. Device declarations own pin assignments, axis usages/ranges/neutral values and momentary/maintained/conflict policy; the shared profile engine constructs and processes those declarations consistently.
 
