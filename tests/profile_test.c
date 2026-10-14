@@ -47,7 +47,8 @@ static void validation(void) {
     axes[1].channel=1; axes[1].usage=axes[0].usage; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_OVERLAP);
     axes[1].usage=0x31; axes[1].maximum=0; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_INVALID);
     axes[1].maximum=4095; profile.button_count=129; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_TOO_LARGE);
-    profile=(osg_profile_t){.name="empty"}; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_INVALID);
+    profile=(osg_profile_t){.name="empty"}; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_OK);
+    assert(!layout.length && !osg_profile_descriptor(&profile,descriptor,sizeof descriptor));
     profile.button_count=1; assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_INVALID);
     osg_profile_encoder_t encoder={24,25}; profile=(osg_profile_t){.name="slow-encoder",.encoders=&encoder,.encoder_count=1,.expander_mask=1};
     assert(osg_profile_validate(&profile,&layout)==OSG_PROFILE_INVALID);

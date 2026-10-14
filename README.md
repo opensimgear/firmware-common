@@ -46,6 +46,23 @@ One invocation assigns the complete row-major surface. Descriptors without
 display metadata retain the original bounded-string behavior. Geometry/encoding
 are additive schema-1 fields and a changed device catalogue requires a new revision.
 
+`osg_actions_enable_ownership()` opts a validated registry into exclusive endpoint
+leases and advertises its capability. Products dispatch with
+`osg_actions_command_at()` using the current module clock and USB/CAN scope, tick
+`osg_actions_tick()` independently of host traffic, and call
+`osg_actions_invalidate_scope()` on affected transport loss. Secret nonzero UUID
+tokens, endpoint alias exclusion, monotonically increasing lease IDs and
+250–5000 ms TTLs prevent competing writers. Claim stores a fully validated
+readable-setter fallback without applying it. Expiry or release attempts fallback
+once and requires exact software readback; failures remain visible and never
+retry an old fallback over a new owner. Legacy invokes and diagnostics respect
+claims. The [wire contract](https://github.com/opensimgear/protocol/blob/main/serial/output-ownership.md)
+defines claim/renew/invoke_owned/release and bounded paged public ownership.
+Tokens never appear in replies. Ownership is volatile and separate from settings
+claims. The command envelope is still 384 bytes and JSON at most 4091 bytes;
+enablement rejects catalogues whose owned commands cannot fit. Legacy products
+that do not enable ownership retain their original command behavior.
+
 ## Panel input events
 
 `opensimgear/events.h` collects mapped button transitions and encoder detents in a
@@ -87,11 +104,11 @@ control metadata/pages. They do not qualify physical displays or analog wiring.
 
 A device pins this repository through FetchContent, sets `OSG_EMBEDDED=ON` and `OSG_USB_CONFIG_DIR` to its directory containing `tusb_config.h`, then links selected libraries. The STM32G0 USB target defines `STM32G0B1xx` and is used by both current module and gateway targets. Other MCU families require an explicit port. Header-only CMSIS and HAL source directory variables are exported to the device's parent build so its board can select HAL modules.
 
-`osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_cdc_configuration()` exposes only CDC control/data interfaces 0/1. Gateways use this topology when there are no enabled controllers, so Windows sees the Cockpit console without a placeholder controller. `osg_usb_hid_cdc_configuration()` adds HID interface 2 with a 64-byte input endpoint; its CDC function is identical to the CDC-only topology. Switching configurations retains the gateway's VID, PID, serial string index, CDC interface numbers and endpoint addresses. Both helpers return the bytes written, or zero without writing for a null buffer or insufficient capacity. Standalone devices continue to select HID + CDC with their own report descriptor. Products needing another topology should add a separate helper rather than change every device implicitly.
+`osg_usb_device_descriptor(vid, pid, revision)` retains caller-supplied identity. `osg_usb_cdc_configuration()` exposes only CDC control/data interfaces 0/1. Gateways use this topology when there are no enabled controllers, so Windows sees the Cockpit console without a placeholder controller. `osg_usb_hid_cdc_configuration()` adds HID interface 2 with a 64-byte input endpoint; its CDC function is identical to the CDC-only topology. Switching configurations retains the gateway's VID, PID, serial string index, CDC interface numbers and endpoint addresses. Both helpers return the bytes written, or zero without writing for a null buffer or insufficient capacity. Standalone devices select HID + CDC when their active profile has inputs and CDC only for a zero-input profile. Products needing another topology should add a separate helper rather than change every device implicitly.
 
 `opensimgear/inputs.h` supplies maintained-contact debounce (10 ms), eight-way hat mapping (null state 8), clamped unsigned axis scaling and a quadrature encoder queue. The encoder expects one four-transition cycle per detent anchored at both contacts open (`AB=3`). It queues at most 16 waiting events, diagnoses overflow/illegal jumps and waits for actual report completion before starting its 25 ms press/release intervals. Call `osg_encoder_reported()` only after the corresponding report reaches the host, not when it is merely submitted. Rearm on transport recovery to discard old queued events; inspect the counters for diagnostics. Device declarations own pin assignments, axis usages/ranges/neutral values and momentary/maintained/conflict policy; the shared profile engine constructs and processes those declarations consistently.
 
-`opensimgear/profile.h` validates contact indexes (24 direct plus eight 16-contact banks), ADC indexes, report capacity and non-overlapping ownership. Encoders are restricted to direct inputs. Disabled controls are omitted from arrays and their descriptors. Report order is declared buttons, encoder pairs, selector triples, byte padding, packed hat nibbles/padding and 16-bit axes. Logical buttons total at most 128 including encoder/selector outputs; at most 8 axes, 4 hats, 8 encoders and 8 selectors are allowed. The largest valid input report is 34 bytes. Momentary controls wait for release after startup/recovery; hats and exclusive button groups suppress conflicts. Failed expansion banks suppress only affected controls and fresh recovery re-arms safely. Axis freshness expires after 100 ms. `osg_profile_reported()` must receive only a completed report from the current transport generation.
+`opensimgear/profile.h` validates contact indexes (24 direct plus eight 16-contact banks), ADC indexes, report capacity and non-overlapping ownership. Encoders are restricted to direct inputs. Disabled controls are omitted from arrays and their descriptors. Report order is declared buttons, encoder pairs, selector triples, byte padding, packed hat nibbles/padding and 16-bit axes. Logical buttons total at most 128 including encoder/selector outputs; at most 8 axes, 4 hats, 8 encoders and 8 selectors are allowed. The largest valid input report is 34 bytes. A named zero-input profile is valid with report length zero; its descriptor function returns zero and products must select CDC-only USB, rather than add a placeholder controller. Momentary controls wait for release after startup/recovery; hats and exclusive button groups suppress conflicts. Failed expansion banks suppress only affected controls and fresh recovery re-arms safely. Axis freshness expires after 100 ms. `osg_profile_reported()` must receive only a completed report from the current transport generation.
 
 `opensimgear/tca9555.h` uses caller-supplied seven-bit-address register callbacks. Each bank configures inputs and non-inverted polarity, verifies both settings and reads both ports. Failed transactions clear configuration and return no contacts. A round-robin poll processes at most one enabled address per tick. Input snapshots expire per bank after 100 ms, with wrap-safe ages, and never reuse stale contacts after failure. The device port owns bounded transaction deadlines and hardware bus recovery. TCA9555 contact pull-ups, address straps and bus loading are hardware responsibilities; fast encoders are not supported through this polled interface.
 

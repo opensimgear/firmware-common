@@ -16,7 +16,6 @@ osg_profile_result_t osg_profile_validate(const osg_profile_t *p, osg_profile_la
        (p->selector_count && !p->selectors)) return OSG_PROFILE_INVALID;
     unsigned buttons=p->button_count+2U*p->encoder_count+3U*p->selector_count;
     if(buttons>128) return OSG_PROFILE_TOO_LARGE;
-    if(!buttons && !p->axis_count && !p->hat_count) return OSG_PROFILE_INVALID;
     osg_profile_layout_t l={.buttons=(uint8_t)buttons,.axes=p->axis_count,.hats=p->hat_count};
     l.hat_offset=(uint8_t)((buttons+7)/8); l.axis_offset=(uint8_t)(l.hat_offset+(p->hat_count+1)/2);
     l.length=(uint8_t)(l.axis_offset+2*p->axis_count);
@@ -45,7 +44,7 @@ osg_profile_result_t osg_profile_validate(const osg_profile_t *p, osg_profile_la
 }
 size_t osg_profile_descriptor(const osg_profile_t *p, uint8_t *out, size_t capacity) {
     osg_profile_layout_t l;
-    if(osg_profile_validate(p,&l)!=OSG_PROFILE_OK || !out) return 0;
+    if(osg_profile_validate(p,&l)!=OSG_PROFILE_OK || !out || !l.length) return 0;
     uint8_t d[OSG_DESCRIPTOR_CAPACITY]; size_t n=0;
 #define EMIT(...) do { const uint8_t items[]={__VA_ARGS__}; memcpy(d+n,items,sizeof items); n+=sizeof items; } while(0)
     EMIT(0x05,1,0x09,4,0xa1,1);
