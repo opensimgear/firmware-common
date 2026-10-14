@@ -67,6 +67,12 @@ static void descriptor(writer_t *w, const osg_action_descriptor_t *a) {
     literal(w,",\"endpoint\":"); quoted(w,a->endpoint);
     literal(w,",\"semantics\":"); quoted(w,a->semantics==OSG_ACTION_SETTER ? "setter":"oneShot");
     literal(w,",\"readable\":"); literal(w,a->readable ? "true":"false");
+    if(a->display) {
+        literal(w,",\"display\":{\"columns\":");number(w,a->display->columns);
+        literal(w,",\"rows\":");number(w,a->display->rows);
+        literal(w,",\"encoding\":");quoted(w,a->display->encoding==OSG_ACTION_DISPLAY_ASCII?"ascii":"utf8");
+        literal(w,"}");
+    }
     literal(w,",\"parameters\":[");
     for (size_t i=0;i<a->parameter_count;++i) {
         const osg_action_parameter_t *p=&a->parameters[i];
@@ -118,6 +124,14 @@ static bool valid_value(const osg_action_parameter_t *p, const osg_action_value_
 }
 static bool valid_values(const osg_action_descriptor_t *d, const osg_action_value_t *v) {
     for(size_t i=0;i<d->parameter_count;++i) if(!valid_value(&d->parameters[i],&v[i])) return false;
+    if(d->display) {
+        unsigned cells=0;
+        for(const unsigned char *p=(const unsigned char *)v[0].value.text;*p;p++) {
+            if(d->display->encoding==OSG_ACTION_DISPLAY_ASCII && *p>=128) return false;
+            if((*p&0xC0)!=0x80) cells++;
+        }
+        if(cells>(unsigned)d->display->columns*d->display->rows) return false;
+    }
     return true;
 }
 bool osg_actions_init(osg_actions_t *a, const osg_action_descriptor_t *d, size_t count,
@@ -160,6 +174,14 @@ bool osg_actions_init(osg_actions_t *a, const osg_action_descriptor_t *d, size_t
                 wire=2*p->max_bytes; json=6*p->max_bytes+2;
             }
             command_size+=1+wire; action_state_size+=1+json;
+        }
+        if(x->display) {
+            const osg_action_display_t *display=x->display;
+            unsigned cells=(unsigned)display->columns*display->rows;
+            if(!display->columns || display->columns>63 || !display->rows || display->rows>4 ||
+               cells>63 || (unsigned)display->encoding>OSG_ACTION_DISPLAY_ASCII ||
+               x->semantics!=OSG_ACTION_SETTER || !x->readable || x->parameter_count!=1 ||
+               x->parameters[0].type!=OSG_ACTION_STRING || x->parameters[0].max_bytes<cells) return false;
         }
         if(command_size>=OSG_ACTION_COMMAND_CAPACITY) return false;
         if(x->readable) state_size+=action_state_size;
@@ -271,6 +293,7 @@ bool osg_actions_command(osg_actions_t *a, const char *line, char *reply, size_t
         if(count!=4u+d->parameter_count) { error(reply,capacity,"invalidArgument"); return true; }
         osg_action_value_t v[OSG_ACTION_MAX_PARAMETERS]={0};
         for(size_t i=0;i<d->parameter_count;++i) if(!parse_value(&d->parameters[i],tokens[4+i],&v[i])) { error(reply,capacity,"invalidArgument"); return true; }
+        if(!valid_values(d,v)) { error(reply,capacity,"invalidArgument"); return true; }
         if(!a->invoke(a->context,d->id,v,d->parameter_count) ||
            (d->readable && (!a->read(a->context,d->id,v,d->parameter_count) || !valid_values(d,v)))) { error(reply,capacity,"failed"); return true; }
         header(&w,a); literal(&w,",\"id\":"); quoted(&w,d->id); literal(&w,",\"values\":"); values(&w,v,d->parameter_count); literal(&w,"}");

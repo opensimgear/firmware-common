@@ -7,8 +7,53 @@ static const osg_profile_button_t button={.input=0};
 static const osg_profile_encoder_t encoder={.a=1,.b=2};
 static const osg_profile_t profile={.name="panel",.buttons=&button,.button_count=1,.encoders=&encoder,.encoder_count=1};
 static char reply[OSG_EVENTS_REPLY_CAPACITY];
+static void command(const osg_events_t *,const char *,const char *);
+static void transform(void *context,const osg_profile_state_t *state,uint8_t report[OSG_REPORT_CAPACITY]) {
+    unsigned *calls=context;(*calls)++;
+    /* A production product uses its runtime inversion/deadzone here. This
+     * independent test transform proves the snapshot sees the final values. */
+    if(state->axis_available&1U) {
+        unsigned offset=state->layout.axis_offset;
+        uint16_t value=(uint16_t)(report[offset]|(uint16_t)report[offset+1]<<8);
+        value=(uint16_t)(65535U-value);report[offset]=(uint8_t)value;report[offset+1]=(uint8_t)(value>>8);
+    }
+}
+static void axis_snapshot_test(void) {
+    osg_profile_axis_t axes[]={ {.channel=3,.usage=0x30,.minimum=100,.maximum=3900,.neutral=123},
+                               {.channel=1,.usage=0x31,.minimum=0,.maximum=4095,.neutral=32768} };
+    osg_profile_button_t buttons[]={ {.input=0}, {.input=1,.maintained=true} };
+    osg_profile_encoder_t encoder={.a=2,.b=3};
+    osg_profile_selector_t selector={.low=4,.high=5};
+    osg_profile_t panel={.name="radio",.buttons=buttons,.button_count=2,.encoders=&encoder,.encoder_count=1,
+        .selectors=&selector,.selector_count=1,.axes=axes,.axis_count=2};
+    osg_profile_sample_t sample={0};osg_events_t events;
+    assert(osg_events_init(&events,&panel,&sample,UINT32_MAX-20U,7));
+    command(&events,"events state","\"contactButtonCount\":2,\"maintainedButtons\":[1],\"selectorButtons\":[[4,5,6]]");
+    assert(strstr(reply,"\"axisCount\":2,\"axisUsage\":[48,49],\"axisNeutral\":[123,32768],\"axes\":[123,32768],\"axisAvailable\":[false,false]"));
+    assert(strstr(reply,"\"sampledAtMs\":4294967275"));
+    osg_events_set_transform(NULL,transform,NULL);
+    unsigned calls=0;osg_events_set_transform(&events,transform,&calls);
+    sample.axes[3]=100;sample.axes[1]=4095;sample.axes_fresh=(1U<<3)|(1U<<1);
+    osg_events_observe(&events,&sample,UINT32_MAX-10U);
+    command(&events,"events state","\"axes\":[65535,65535],\"axisAvailable\":[true,true]");
+    assert(calls==1 && strstr(reply,"\"encoderButtons\":[2,3]"));
+    sample.axes[3]=2000;sample.axes[1]=0;osg_events_observe(&events,&sample,0);
+    command(&events,"events read 7 0","\"axes\":[32767,0],\"axisAvailable\":[true,true],\"sampledAtMs\":0");
+    sample.axes_fresh=0;osg_events_observe(&events,&sample,99);
+    command(&events,"events state","\"axes\":[32767,0],\"axisAvailable\":[true,true]");
+    osg_events_observe(&events,&sample,100);
+    command(&events,"events state","\"axes\":[123,32768],\"axisAvailable\":[false,false]");
+    assert(calls==4);
+    /* A new mapping/stream discards both data and the previous callback. */
+    assert(osg_events_init(&events,&panel,&sample,101,8));
+    assert(!events.transform && !events.transform_context);
+    sample.axes_fresh=(1U<<3);sample.axes[3]=3900;osg_events_observe(&events,&sample,111);
+    command(&events,"events state","\"axes\":[65535,32768],\"axisAvailable\":[true,false]");
+}
 static void command(const osg_events_t *events,const char *line,const char *contains) {
-    assert(osg_events_command(events,line,reply,sizeof reply));assert(strstr(reply,contains));
+    assert(osg_events_command(events,line,reply,sizeof reply));
+    if(!strstr(reply,contains)) fprintf(stderr,"%s expected %s in %s\n",line,contains,reply);
+    assert(strstr(reply,contains));
     assert(strlen(reply)<=OSG_EVENTS_REPLY_CAPACITY-5);
 }
 static void contact(osg_events_t *events,osg_profile_sample_t *sample,uint32_t now,bool pressed) {
@@ -99,5 +144,14 @@ int main(void) {
     for(unsigned i=0;i<8;i++) sample.expansion_closed[i]=0xFFFF;
     osg_events_observe(&events,&sample,30);osg_events_observe(&events,&sample,40);
     assert(events.head==128);command(&events,"events read 4294967295 64","\"next\":80");
+    /* Maximum metadata and a full page remain within sealed response bounds. */
+    for(unsigned i=0;i<128;i++) buttons[i].maintained=true;
+    osg_profile_axis_t axes[8];for(unsigned i=0;i<8;i++) axes[i]=(osg_profile_axis_t){.channel=(uint8_t)i,.usage=(uint8_t)(0x30+i),.minimum=0,.maximum=4095,.neutral=65535};
+    maximum.axes=axes;maximum.axis_count=8;
+    assert(osg_events_init(&events,&maximum,&sample,UINT32_MAX,UINT32_MAX));
+    osg_events_observe(&events,&sample,UINT32_MAX);osg_events_observe(&events,&sample,9);
+    command(&events,"events read 4294967295 64","\"next\":80");
+    assert(strstr(reply,"\"maintainedButtons\":[0,1,2") && strstr(reply,"\"axisCount\":8"));
+    axis_snapshot_test();
     puts("bounded independent panel input events passed");
 }

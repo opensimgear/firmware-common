@@ -16,12 +16,19 @@ UTF-8 string hex/escaping, no-parameter one-shots, readable state and callback
 failures. Invalid arguments, stale catalogue revisions, unknown actions and small
 reply buffers must not invoke the device. The handler does not own transport
 request deduplication; routed integration tests cover that separate boundary.
+Display tests cover optional geometry/encoding, one-string readable-setter
+requirements, ASCII rejection, UTF-8 scalar cells independently of byte length,
+short/empty text, invalid callback readback and unchanged legacy descriptors.
 
 `panel_input_events` verifies debounce/rearm, short press/release capture between
 reads, independent encoder detents beyond the HID queue capacity, retained-read
 identity, 16-record paging, 64-record wrap/overflow, stream/cursor/gap rejection,
 sequence exhaustion, maintained/selector/expansion rules and maximum 128-button
 JSON sizing. The portable decoder preserves existing HID acknowledgement tests.
+Typed control metadata identifies maintained contacts, selector triples and
+encoder pairs. Axis tests verify the independent report-transform callback,
+logical order versus physical ADC indexes, calibration/inversion, stale neutral
+fallback, millisecond wrap, activation clearing and an eight-axis/128-contact page.
 
 Configure with `OSG_TEST_COVERAGE=ON`, run CTest, then build the `coverage` target.
 The portable core's weighted executable-line coverage must be strictly above

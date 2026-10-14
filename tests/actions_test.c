@@ -90,6 +90,52 @@ static void invalid_catalogues(void) {
     for(size_t i=0;i<16;++i) { snprintf(ids[i],sizeof ids[i],"a%u",(unsigned)i); too_many[i]=c; too_many[i].id=ids[i]; }
     assert(!osg_actions_init(&a,too_many,16,1,invoke,read,NULL));
 }
+static void display_test(void) {
+    device_t device={.stored={[4]={.type=OSG_ACTION_STRING}}};
+    osg_action_display_t display={.columns=3,.rows=2,.encoding=OSG_ACTION_DISPLAY_UTF8};
+    osg_action_descriptor_t descriptor=catalogue[4];descriptor.display=&display;
+    osg_actions_t actions;assert(osg_actions_init(&actions,&descriptor,1,2,invoke,read,&device));
+    command(&actions,"action describe 0","\"display\":{\"columns\":3,\"rows\":2,\"encoding\":\"utf8\"}");
+    command(&actions,"action invoke 2 display.set_text 414243444546","ABCDEF");
+    rejection(&actions,&device,"action invoke 2 display.set_text 41424344454647","invalidArgument");
+    /* Scalar cells and byte limits are independent; UTF-8 stays intact. */
+    command(&actions,"action invoke 2 display.set_text C2A3E282ACF09F9880414243","\xC2\xA3\xE2\x82\xAC\xF0\x9F\x98\x80" "ABC");
+    rejection(&actions,&device,"action invoke 2 display.set_text C2A3E282ACF09F988041424344","invalidArgument");
+    strcpy(device.stored[4].value.text,"1234567");command(&actions,"action state","failed");
+    display.encoding=OSG_ACTION_DISPLAY_ASCII;
+    assert(osg_actions_init(&actions,&descriptor,1,3,invoke,read,&device));
+    rejection(&actions,&device,"action invoke 3 display.set_text C2A3","invalidArgument");
+    command(&actions,"action invoke 3 display.set_text 225C20202020","\"values\":[\"\\\"\\\\    \"]");
+    command(&actions,"action invoke 3 display.set_text -","\"values\":[\"\"]");
+    strcpy(device.stored[4].value.text,"\xC2\xA3");command(&actions,"action state","failed");
+    osg_action_parameter_t parameter=string;parameter.max_bytes=6;descriptor.parameters=&parameter;
+    display.encoding=OSG_ACTION_DISPLAY_UTF8;
+    assert(osg_actions_init(&actions,&descriptor,1,4,invoke,read,&device));
+    rejection(&actions,&device,"action invoke 4 display.set_text F09F9880F09F9880","invalidArgument");
+    for(unsigned trial=0;trial<9;trial++) {
+        descriptor=catalogue[4];descriptor.display=&display;
+        display=(osg_action_display_t){.columns=3,.rows=2,.encoding=OSG_ACTION_DISPLAY_UTF8};
+        switch(trial) {
+            case 0:display.columns=0;break;
+            case 1:display.columns=64;break;
+            case 2:display.rows=0;break;
+            case 3:display.rows=5;break;
+            case 4:display.columns=16;display.rows=4;break;
+            case 5:display.encoding=(osg_action_display_encoding_t)-1;break;
+            case 6:descriptor.readable=false;break;
+            case 7:descriptor.semantics=OSG_ACTION_ONE_SHOT;break;
+            default:descriptor.parameters=&boolean;break;
+        }
+        assert(!osg_actions_init(&actions,&descriptor,1,1,invoke,read,&device));
+    }
+    descriptor=catalogue[4];descriptor.display=&display;descriptor.parameters=&parameter;
+    display=(osg_action_display_t){.columns=7,.rows=1,.encoding=OSG_ACTION_DISPLAY_ASCII};
+    assert(!osg_actions_init(&actions,&descriptor,1,1,invoke,read,&device));
+    /* Legacy one-string descriptors still accept text with no geometry. */
+    descriptor.display=NULL;
+    assert(osg_actions_init(&actions,&descriptor,1,1,invoke,read,&device));
+    command(&actions,"action describe 0","\"maxBytes\":6");assert(!strstr(reply,"\"display\":"));
+}
 int main(void) {
     device_t device={.stored={{.type=OSG_ACTION_BOOLEAN},{.type=OSG_ACTION_RGB},
         {.type=OSG_ACTION_ENUM,.value.text="auto"},{.type=OSG_ACTION_INTEGER},
@@ -142,5 +188,5 @@ int main(void) {
     osg_actions_t paginated; assert(osg_actions_init(&paginated,fat,2,1,invoke,NULL,NULL));
     command(&paginated,"action describe 0","\"next\":1");
     command(&paginated,"action describe 1","\"next\":null");
-    invalid_catalogues(); puts("device action behavior passed");
+    invalid_catalogues();display_test(); puts("device action behavior passed");
 }

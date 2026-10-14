@@ -11,6 +11,13 @@ enum { OSG_ACTION_SCHEMA_VERSION=1, OSG_ACTION_MAX_COUNT=16,
 typedef enum { OSG_ACTION_BOOLEAN, OSG_ACTION_INTEGER, OSG_ACTION_ENUM,
                OSG_ACTION_RGB, OSG_ACTION_STRING } osg_action_type_t;
 typedef enum { OSG_ACTION_SETTER, OSG_ACTION_ONE_SHOT } osg_action_semantics_t;
+typedef enum { OSG_ACTION_DISPLAY_UTF8, OSG_ACTION_DISPLAY_ASCII } osg_action_display_encoding_t;
+/* One Unicode scalar per logical cell for UTF-8; one byte per cell for ASCII.
+ * Hardware character repertoire/font ownership remains with the callback. */
+typedef struct {
+    uint8_t columns, rows;
+    osg_action_display_encoding_t encoding;
+} osg_action_display_t;
 typedef struct {
     const char *id, *label;
     osg_action_type_t type;
@@ -23,6 +30,8 @@ typedef struct {
     osg_action_semantics_t semantics;
     bool readable;
     const osg_action_parameter_t *parameters; uint8_t parameter_count;
+    /* Optional, readable one-string setter only. Full row-major surface. */
+    const osg_action_display_t *display;
 } osg_action_descriptor_t;
 typedef struct {
     osg_action_type_t type;
