@@ -17,9 +17,15 @@ failures. Invalid arguments, stale catalogue revisions, unknown actions and smal
 reply buffers must not invoke the device. The handler does not own transport
 request deduplication; routed integration tests cover that separate boundary.
 
+`panel_input_events` verifies debounce/rearm, short press/release capture between
+reads, independent encoder detents beyond the HID queue capacity, retained-read
+identity, 16-record paging, 64-record wrap/overflow, stream/cursor/gap rejection,
+sequence exhaustion, maintained/selector/expansion rules and maximum 128-button
+JSON sizing. The portable decoder preserves existing HID acknowledgement tests.
+
 Configure with `OSG_TEST_COVERAGE=ON`, run CTest, then build the `coverage` target.
 The portable core's weighted executable-line coverage must be strictly above
-70%. This includes the action dispatcher and existing acquisition/profile/line
+70%. This includes event collection, the action dispatcher and acquisition/profile/line
 code; optional TinyUSB sources and electrical behavior are outside this measure.
 GNU gcov is used on Linux, and `xcrun llvm-cov gcov` for Clang on macOS.
 For a nondefault compiler, set `OSG_GCOV_COMMAND` to its matching gcov tool

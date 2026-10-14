@@ -32,18 +32,22 @@ void osg_encoder_rearm(osg_encoder_t *e, uint8_t ab) {
 void osg_encoder_init(osg_encoder_t *e, uint8_t ab) {
     memset(e, 0, sizeof *e); osg_encoder_rearm(e, ab);
 }
-void osg_encoder_sample(osg_encoder_t *e, uint8_t ab) {
+int8_t osg_encoder_decode(osg_encoder_t *e, uint8_t ab) {
     static const int8_t delta[16] = {0,1,-1,0, -1,0,0,1, 1,0,0,-1, 0,-1,1,0};
     ab &= 3;
     uint8_t previous = e->previous; e->previous = ab;
     if ((previous ^ ab) == 3) {
-        e->invalid++; e->steps = 0; e->synchronized = ab == 3; return;
+        e->invalid++; e->steps = 0; e->synchronized = ab == 3; return 0;
     }
-    if (!e->synchronized) { if (ab == 3) e->synchronized = true; return; }
+    if (!e->synchronized) { if (ab == 3) e->synchronized = true; return 0; }
     e->steps += delta[previous * 4 + ab];
-    if (ab != 3) return;
+    if (ab != 3) return 0;
     int8_t direction = e->steps == 4 ? 1 : e->steps == -4 ? -1 : 0;
     e->steps = 0;
+    return direction;
+}
+void osg_encoder_sample(osg_encoder_t *e, uint8_t ab) {
+    int8_t direction=osg_encoder_decode(e,ab);
     if (!direction) return;
     if (e->count == sizeof e->queue) { e->dropped++; return; }
     e->queue[(e->head + e->count) % sizeof e->queue] = direction; e->count++;

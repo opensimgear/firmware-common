@@ -4,13 +4,13 @@ Reusable C support for device firmware. Shared application protocol definitions 
 
 ## Implemented starter support
 
-- `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion, plus device-advertised action descriptors, typed validation and command dispatch.
+- `osg_core`: debounced momentary buttons with release-to-rearm, maintained contacts, hat decoding, axis scaling, bounded quadrature encoder events, a bounded LF/CRLF diagnostic line parser, validated generic profiles, HID report descriptor/packing and portable TCA9555 input expansion, a separate bounded mapped-button/encoder transition log, plus device-advertised action descriptors, typed validation and command dispatch.
 - `osg_usb`: CDC-only and HID + CDC configuration and composite-device descriptor helpers. Products retain their own HID reports and USB identity.
 - `osg_tinyusb`: STM32G0 USB device stack.
 - `osg_canard`: pinned libcanard library, including its bundled cavl2 dependency, available for transport integration. Current devices link the same pinned implementation through the self-contained `osg_cyphal` snapshot from protocol.
 - Central full-commit pins for TinyUSB, STM32G0 HAL/CMSIS, CMSIS Core, libcanard and protocol.
 
-The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 generic device and three build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway. Both use the shared Cyphal/CAN implementation and generated application DSDL from [protocol](https://github.com/opensimgear/protocol), retaining their identity, ownership, lease and USB delivery rules. This library supplies shared acquisition, USB and temporary device-action support.
+The [device template](https://github.com/opensimgear/device-template) supplies the Rev B STM32G0B1CBT6 generic device and four build-time input profiles. [Device gateway](https://github.com/opensimgear/device-gateway) supplies the STM32G0B1CBT6 USB-to-CAN gateway. Both use the shared Cyphal/CAN implementation and generated application DSDL from [protocol](https://github.com/opensimgear/protocol), retaining their identity, ownership, lease and USB delivery rules. This library supplies shared acquisition, USB, panel input events and temporary device-action support.
 
 Physical STM32 hardware has not been validated. The device template implements portable runtime module settings/calibration using this library's input and profile helpers. Implementation and qualification work is tracked in the [GitHub project](https://github.com/orgs/opensimgear/projects/2).
 
@@ -34,6 +34,28 @@ Assertions remain enabled in Release builds. Tests exercise debouncing, held-con
 Call `osg_actions_init()` with immutable descriptor storage, a nonzero catalogue revision, an invoke callback and a read callback for readable actions. It rejects duplicate/invalid identifiers, invalid UTF-8, unsupported types, inconsistent bounds and catalogue representations that exceed transport budgets. The product callback applies hardware behavior; this library owns command/type/range validation and bounded JSON serialization. `osg_actions_command()` accepts a full singular `action ...` line and returns false for unrelated commands without writing. Recognized failures return `ok:false` plus an error token. All accepted invocations require a 4096-byte reply buffer before executing; JSON reserves framing room and is at most 4091 bytes.
 
 Devices call the same dispatcher from direct CDC and the routed CAN command handler. Actions require no configuration writer claim, do not write flash or change input/HID ownership, and can be used for online HID-disabled or direct USB devices. Temporary output values reset according to the device's reboot policy. The transport owns identity/boot/lease/epoch checks and duplicate request retention; this library does not infer delivery or retry one-shot operations. Invoke success confirms software application, not an electrical measurement. The current generic board advertises its existing status LED's auto/on/off modes; its native emulator advertises RGB and boolean LED endpoints.
+
+## Panel input events
+
+`opensimgear/events.h` collects mapped button transitions and encoder detents in a
+64-record volatile ring with 16-record nonconsuming pages. It owns separate
+always-running acquisition, independent of product HID state and delivery ACKs.
+`events state` provides a held-state/head baseline; `events read <stream> <after>`
+validates stream/cursor and reports gaps, overflow and ordered edges. Products
+reinitialize after input mapping activation and scope the stream to module boot.
+The [panel event contract](https://github.com/opensimgear/protocol/blob/main/serial/panel-input-events.md)
+defines baseline/reconnect behavior, control indexes and encoder press/release
+pairs. Event reads use no configuration claim or persistent storage.
+
+Call `osg_events_init()` with a validated immutable active profile, an initial
+sample and its nonzero stream generation. Observe each fresh sample through
+`osg_events_observe()` even when HID is inactive. The profile storage must outlive
+the collector; sample pointers are not retained. `osg_events_command()` accepts
+the full `events ...` command and requires a 4096-byte reply buffer. Reinitialize
+after configuration activation, retaining the collector across HID ownership
+changes. Event sequences never wrap: exhaustion fails closed until activation
+or reboot. Native tests cover startup/recovery, short press/release retention,
+independent encoder decoding, paging, immutable reads, overflow/gaps and bounds.
 
 ## Embedded integration
 
