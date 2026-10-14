@@ -40,3 +40,20 @@ For a nondefault compiler, set `OSG_GCOV_COMMAND` to its matching gcov tool
 `.research/native/coverage` (or the chosen scratch build directory). CI enables
 this gate. Use a clean build after editing instrumented sources if retained
 profiles no longer match the new objects.
+
+The sixth portable suite, `endpoint_output_ownership`, checks opt-in capability,
+endpoint aliases and one-shot exclusion, competing USB/CAN writers, independent
+endpoints, UUID normalization/nil rejection, TTL/lease bounds, stale IDs, clock
+wrap, same-owner renewal, expiry and transport invalidation. Typed fallbacks
+include boolean, RGB, integer, enum and escaped UTF-8 strings. Callback write/read
+failure and mismatching readback clear ownership once with visible failure;
+public query pagination never exposes a secret. Oversized legacy catalogues cannot
+enable ownership. Product CAN tests additionally prove immutable cached mutations
+do not renew or reapply. Zero-input profile tests require no HID descriptor.
+
+The six portable suites pass ASan/UBSan. A fresh instrumented run for endpoint
+leases measured 99.53% lines in `actions.c`, 100% in `profile.c` and 99.66% across
+the portable core; the maintained coverage gate requires aggregate coverage above
+70%. Clear old build coverage data after source edits before measuring. These
+are host software checks; physical USB/CAN, LEDs/displays and live-game behavior
+remain outside this suite.
