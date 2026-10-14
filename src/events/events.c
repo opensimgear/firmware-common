@@ -15,8 +15,14 @@ bool osg_events_init(osg_events_t *s,const osg_profile_t *p,const osg_profile_sa
     memset(s,0,sizeof *s);
     if(!stream || !osg_profile_init(&s->acquisition,p,sample,now)) return false;
     s->stream=stream;
+    s->sampled_at=now;
+    for(unsigned i=0;i<p->axis_count;i++) s->axes[i]=p->axes[i].neutral;
     for(unsigned i=0;i<p->encoder_count;i++) osg_encoder_init(&s->decoders[i],ab(sample,p->encoders[i]));
     s->valid=true;return true;
+}
+void osg_events_set_transform(osg_events_t *s,osg_events_transform_fn transform,void *context) {
+    if(!s) return;
+    s->transform=transform;s->transform_context=context;
 }
 static void append_event(osg_events_t *s,uint8_t control,bool pressed) {
     if(s->head==UINT32_MAX) {s->exhausted=true;return;}
@@ -31,7 +37,13 @@ void osg_events_observe(osg_events_t *s,const osg_profile_sample_t *sample,uint3
     if(!s || !s->valid || s->exhausted || !sample) return;
     uint8_t report[OSG_REPORT_CAPACITY];
     osg_profile_update(&s->acquisition,sample,now,true,report);
+    if(s->transform) s->transform(s->transform_context,&s->acquisition,report);
+    s->sampled_at=now;
     const osg_profile_t *p=s->acquisition.definition;
+    for(unsigned i=0;i<p->axis_count;i++) {
+        unsigned offset=s->acquisition.layout.axis_offset+2U*i;
+        s->axes[i]=(uint16_t)(report[offset]|(uint16_t)report[offset+1]<<8);
+    }
     unsigned encoder_end=p->button_count+2U*p->encoder_count;
     for(unsigned control=0;control<s->acquisition.layout.buttons;control++) {
         if(control>=p->button_count && control<encoder_end) continue;
@@ -82,7 +94,26 @@ static void metadata(writer_t *w,const osg_events_t *s) {
     writef(w,"],\"encoderButtons\":[");
     const osg_profile_t *p=s->acquisition.definition;
     for(unsigned i=0;i<2U*p->encoder_count;i++) writef(w,"%s%u",i?",":"",p->button_count+i);
-    writef(w,"]");
+    writef(w,"],\"contactButtonCount\":%u,\"maintainedButtons\":[",p->button_count);
+    bool comma=false;
+    for(unsigned i=0;i<p->button_count;i++) if(p->buttons[i].maintained) {
+        writef(w,"%s%u",comma?",":"",i);comma=true;
+    }
+    writef(w,"],\"selectorButtons\":[");
+    unsigned base=p->button_count+2U*p->encoder_count;
+    for(unsigned i=0;i<p->selector_count;i++) {
+        unsigned first=base+3U*i;
+        writef(w,"%s[%u,%u,%u]",i?",":"",first,first+1U,first+2U);
+    }
+    writef(w,"],\"axisCount\":%u,\"axisUsage\":[",p->axis_count);
+    for(unsigned i=0;i<p->axis_count;i++) writef(w,"%s%u",i?",":"",p->axes[i].usage);
+    writef(w,"],\"axisNeutral\":[");
+    for(unsigned i=0;i<p->axis_count;i++) writef(w,"%s%u",i?",":"",p->axes[i].neutral);
+    writef(w,"],\"axes\":[");
+    for(unsigned i=0;i<p->axis_count;i++) writef(w,"%s%u",i?",":"",s->axes[i]);
+    writef(w,"],\"axisAvailable\":[");
+    for(unsigned i=0;i<p->axis_count;i++) writef(w,"%s%s",i?",":"",(s->acquisition.axis_available&(1U<<i))?"true":"false");
+    writef(w,"],\"sampledAtMs\":%lu",(unsigned long)s->sampled_at);
 }
 bool osg_events_command(const osg_events_t *s,const char *line,char *reply,size_t capacity) {
     if(!line || strncmp(line,"events",6) || (line[6] && line[6]!=' ' && line[6]!='\t')) return false;

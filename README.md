@@ -35,6 +35,17 @@ Call `osg_actions_init()` with immutable descriptor storage, a nonzero catalogue
 
 Devices call the same dispatcher from direct CDC and the routed CAN command handler. Actions require no configuration writer claim, do not write flash or change input/HID ownership, and can be used for online HID-disabled or direct USB devices. Temporary output values reset according to the device's reboot policy. The transport owns identity/boot/lease/epoch checks and duplicate request retention; this library does not infer delivery or retry one-shot operations. Invoke success confirms software application, not an electrical measurement. The current generic board advertises its existing status LED's auto/on/off modes; its native emulator advertises RGB and boolean LED endpoints.
 
+A readable one-string setter may point `descriptor.display` at immutable
+`osg_action_display_t` metadata: 1–63 columns, 1–4 rows, at most 63 total logical
+cells, and ASCII or UTF-8 encoding. `max_bytes` remains the endpoint's independent
+1–63 byte budget and must accommodate its cells. The handler rejects unsupported
+ASCII characters and excess scalar cells before invoking, and checks readback too.
+UTF-8 uses one Unicode scalar per logical cell, rather than terminal glyph width;
+font/repertoire and physical display updates belong to the device callback.
+One invocation assigns the complete row-major surface. Descriptors without
+display metadata retain the original bounded-string behavior. Geometry/encoding
+are additive schema-1 fields and a changed device catalogue requires a new revision.
+
 ## Panel input events
 
 `opensimgear/events.h` collects mapped button transitions and encoder detents in a
@@ -56,6 +67,21 @@ after configuration activation, retaining the collector across HID ownership
 changes. Event sequences never wrap: exhaustion fails closed until activation
 or reboot. Native tests cover startup/recovery, short press/release retention,
 independent encoder decoding, paging, immutable reads, overflow/gaps and bounds.
+
+Event replies also advertise `contactButtonCount`, maintained logical indexes,
+selector triples and axes in profile order. Axis snapshots include normalized
+u16 values, usages, neutral values, per-axis availability and `sampledAtMs`.
+They are current state rather than ring records; changing an axis does not consume
+button sequence space. Fresh ADC samples expire after 100 ms and then return the
+declared neutral with availability false. Register `osg_events_set_transform()`
+after each init to apply the product runtime's inversion/deadzone to the separate
+active acquisition report before capture. Its callback must transform only axes
+and must not use or acknowledge product HID state. Initialization clears that
+callback, cached samples and history, so activation must register it again.
+
+Native tests include display encoding/cell/byte rejection and callback readback,
+calibrated independent snapshots, sensor expiry, timestamp wrap and maximum-sized
+control metadata/pages. They do not qualify physical displays or analog wiring.
 
 ## Embedded integration
 
