@@ -118,4 +118,4 @@ Keep reusable input and USB code here rather than copying it into device reposit
 
 ## Licensing
 
-No OpenSimGear license grant is implied for newly authored code. Fetched third-party sources retain their upstream notices, collected in [THIRD_PARTY.md](THIRD_PARTY.md). Binary distributions require the applicable upstream notices.
+Copyright © Ivan Gregurić Ortolan. All rights reserved for original OpenSimGear material while licensing is under review. The [temporary licensing policy](LICENSE) defines the current scope. Creative external contributions are suspended during review; [CONTRIBUTING.md](CONTRIBUTING.md) explains the policy for factual bug reports and questions. Fetched third-party sources retain their upstream licenses and notices, collected in [THIRD_PARTY.md](THIRD_PARTY.md). Binary distributions require the applicable upstream notices.

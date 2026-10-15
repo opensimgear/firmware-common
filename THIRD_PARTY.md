@@ -1,6 +1,6 @@
 # Third-party firmware notices
 
-Dependencies are fetched at the commits owned by firmware-common. Original files retain their upstream copyright notices. These licenses do not select a license for new OpenSimGear code. Preserve applicable notices when packaging binaries.
+Dependencies are fetched at the commits owned by firmware-common. Third-party files retain their upstream licenses and copyright notices. Separately authored OpenSimGear material is copyright © Ivan Gregurić Ortolan, all rights reserved while licensing is under review; see the repository [temporary licensing policy](LICENSE) and [contribution policy](CONTRIBUTING.md). Preserve applicable third-party notices when packaging binaries.
 
 ## TinyUSB
 
