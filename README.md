@@ -1,5 +1,9 @@
 # OpenSimGear firmware common
 
+## Development status and disclaimer
+
+This project is heavily under development and is not ready for use. Use it entirely at your own risk. To the fullest extent permitted by applicable law, the authors and contributors disclaim all liability for any damage, loss, or other issues arising from its use.
+
 Reusable C support for device firmware. Shared application protocol definitions remain in [protocol](https://github.com/opensimgear/protocol); physical pins, declarative device profiles and USB product identity stay in each device repository.
 
 ## Implemented starter support

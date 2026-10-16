@@ -1,5 +1,9 @@
 # Observable behavior tests
 
+## Development status and disclaimer
+
+This project is heavily under development and is not ready for use. Use it entirely at your own risk. To the fullest extent permitted by applicable law, the authors and contributors disclaim all liability for any damage, loss, or other issues arising from its use.
+
 Build/CTest instructions are in the root README. Core tests exercise contact bounce, held-at-start recovery, new press/release, reconnect and millisecond wraparound; the bounded line parser is tested with normal, oversized and invalid input plus subsequent recovery. Input tests also exercise maintained positions, eight-way hat decoding and conflicts, axis scaling, encoder detent ordering/bounce, stalled report acknowledgements, pulse timing, bounded overflow and recovery. Generic-profile tests verify count/ownership/range limits, axis-only/button-only/hat-only descriptor field omission, shifter conflict/release rearming, cross-bank hat/selector failure, stale axis fallback, acknowledged encoder pulses and queued-event discard. Expansion-driver tests verify all register operations, missing/readback-fault recovery, eight-bank round-robin scanning, independent bank freshness, scan-stop expiry and tick wraparound. Optional USB tests inspect generated descriptor bytes, identities, interface/endpoint uniqueness and buffer failure behavior. Release builds keep assertions enabled.
 
 USB topology tests also verify that zero-controller CDC-only configurations have no HID interface or endpoint, and that adding HID retains the same CDC descriptors and assigns HID interface 2.
