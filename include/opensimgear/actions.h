@@ -48,7 +48,7 @@ typedef struct {
     uint32_t id,expires_at;
     uint8_t action_index,fallback_status;
     osg_action_scope_t scope;
-    bool owned,last_owned_valid;
+    bool owned,last_owned_valid,captured_fallback;
 } osg_action_lease_t;
 /* Callbacks run only after complete command and catalogue validation. read must
  * supply one correctly typed value per parameter. A false return is a device
@@ -82,7 +82,10 @@ bool osg_actions_init(osg_actions_t *, const osg_action_descriptor_t *, size_t,
  * reply buffer smaller than OSG_ACTION_REPLY_CAPACITY never executes an action.
  * Transport request IDs/deduplication are owned by the caller, not this API. */
 bool osg_actions_command(osg_actions_t *, const char *line, char *reply, size_t capacity);
-/* Enable endpoint leases only when owned command representations fit. Product
+/* `claim_current` captures fallback and last-owned state in one validated read.
+ * Repeating that claim for its exact token/scope/setter preserves the original
+ * fallback and last-owned comparison point, extending only expiry.
+ * Enable endpoint leases only when owned command representations fit. Product
  * loops tick independently of host traffic and invalidate the affected transport
  * scope on connection/route loss. Catalogue and callback lifetime is unchanged. */
 bool osg_actions_enable_ownership(osg_actions_t *);

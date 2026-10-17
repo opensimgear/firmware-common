@@ -72,6 +72,12 @@ cannot interleave with another writer. The bounded last-owned tuples use an
 additional 4,352 bytes per registry at the fixed 16-endpoint/4-argument limits. Legacy invokes and diagnostics respect
 claims. The [wire contract](https://github.com/opensimgear/protocol/blob/main/serial/output-ownership.md)
 defines claim/renew/invoke_owned/release and bounded paged public ownership.
+`fallbackPolicy: "capture-at-claim"` additionally advertises `claim_current`.
+That command accepts no host fallback tuple: its single validated current-state
+read becomes both fallback and last-owned state atomically. Duplicate claims for
+the exact owner/scope/setter preserve the original capture and comparison point,
+refreshing only expiry. Legacy re-claims cannot replace a captured baseline;
+release/expiry is required before another claim mode or readable setter.
 Tokens never appear in replies. Ownership is volatile and separate from settings
 claims. The command envelope is still 384 bytes and JSON at most 4091 bytes;
 enablement rejects catalogues whose owned commands cannot fit. Legacy products

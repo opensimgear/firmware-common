@@ -95,7 +95,7 @@ static void base_header(writer_t *w, const osg_actions_t *a) {
 }
 static void header(writer_t *w, const osg_actions_t *a) {
     base_header(w,a);
-    if(a->ownership_enabled) literal(w,",\"ownership\":{\"schemaVersion\":1,\"scope\":\"endpoint\",\"maxLeaseMs\":5000,\"restorePolicy\":\"if-unchanged\"}");
+    if(a->ownership_enabled) literal(w,",\"ownership\":{\"schemaVersion\":1,\"scope\":\"endpoint\",\"maxLeaseMs\":5000,\"restorePolicy\":\"if-unchanged\",\"fallbackPolicy\":\"capture-at-claim\"}");
 }
 static void values(writer_t *w, const osg_action_value_t *v, size_t count) {
     literal(w,"[");
@@ -409,7 +409,8 @@ bool osg_actions_command_at(osg_actions_t *a, const char *line,uint32_t now,osg_
         if(releasing) {if(!fallback(a,lease)) {error(reply,capacity,"fallbackFailed");return true;}}
         else lease->expires_at=now+duration;
         lease_reply(&w,a,lease,releasing);
-    } else if(!strcmp(tokens[1],"claim")) {
+    } else if(!strcmp(tokens[1],"claim") || !strcmp(tokens[1],"claim_current")) {
+        bool capture_current=!strcmp(tokens[1],"claim_current");
         uint32_t revision,duration;char secret[OSG_ACTION_TOKEN_CAPACITY];
         if(!a->ownership_enabled) {error(reply,capacity,"ownershipUnsupported");return true;}
         if((unsigned)scope>OSG_ACTION_SCOPE_CAN || count<6 || !unsigned_number(tokens[2],&revision) || !token(tokens[4],secret) || !ttl(tokens[5],&duration)) {error(reply,capacity,"invalidArgument");return true;}
@@ -417,17 +418,24 @@ bool osg_actions_command_at(osg_actions_t *a, const char *line,uint32_t now,osg_
         size_t index=0;for(;index<a->count;index++) if(!strcmp(a->descriptors[index].id,tokens[3])) break;
         if(index==a->count) {error(reply,capacity,"unknownAction");return true;}
         const osg_action_descriptor_t *d=&a->descriptors[index];
-        if(!d->readable || d->semantics!=OSG_ACTION_SETTER || count!=6u+d->parameter_count) {error(reply,capacity,"invalidArgument");return true;}
+        if(!d->readable || d->semantics!=OSG_ACTION_SETTER || count!=(capture_current?6u:6u+d->parameter_count)) {error(reply,capacity,"invalidArgument");return true;}
         osg_action_value_t v[OSG_ACTION_MAX_PARAMETERS]={0};
-        for(size_t i=0;i<d->parameter_count;i++) if(!parse_value(&d->parameters[i],tokens[6+i],&v[i])) {error(reply,capacity,"invalidArgument");return true;}
-        if(!valid_values(d,v)) {error(reply,capacity,"invalidArgument");return true;}
+        if(!capture_current) {
+            for(size_t i=0;i<d->parameter_count;i++) if(!parse_value(&d->parameters[i],tokens[6+i],&v[i])) {error(reply,capacity,"invalidArgument");return true;}
+            if(!valid_values(d,v)) {error(reply,capacity,"invalidArgument");return true;}
+        }
         osg_action_lease_t *lease=&a->leases[endpoint_index(a,index)];
-        if(lease->owned && (strcmp(lease->token,secret) || lease->scope!=scope)) {error(reply,capacity,"outputBusy");return true;}
+        if(lease->owned && (strcmp(lease->token,secret) || lease->scope!=scope || lease->captured_fallback!=capture_current || (capture_current && lease->action_index!=index))) {error(reply,capacity,"outputBusy");return true;}
+        if(lease->owned && capture_current) {
+            /* An explicit duplicate may extend expiry, but never recapture a
+             * value written by this run or erase an external-change fence. */
+            lease->expires_at=now+duration;lease_reply(&w,a,lease,false);return true;
+        }
         osg_action_value_t current[OSG_ACTION_MAX_PARAMETERS]={0};
         if(!a->read(a->context,d->id,current,d->parameter_count) || !valid_values(d,current)) {error(reply,capacity,"failed");return true;}
         if(!lease->owned) {if(a->lease_counter==UINT32_MAX) {error(reply,capacity,"leaseExhausted");return true;}lease->id=++a->lease_counter;}
-        strcpy(lease->token,secret);memcpy(lease->fallback,v,sizeof v);
-        memcpy(lease->last_owned,current,sizeof current);lease->last_owned_valid=true;lease->scope=scope;lease->owned=true;
+        strcpy(lease->token,secret);memcpy(lease->fallback,capture_current?current:v,sizeof v);
+        memcpy(lease->last_owned,current,sizeof current);lease->last_owned_valid=true;lease->scope=scope;lease->owned=true;lease->captured_fallback=capture_current;
         lease->action_index=(uint8_t)index;lease->fallback_status=0;lease->expires_at=now+duration;
         lease_reply(&w,a,lease,false);
     } else if(!strcmp(tokens[1],"invoke") || !strcmp(tokens[1],"invoke_owned")) {

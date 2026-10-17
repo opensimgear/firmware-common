@@ -77,6 +77,12 @@ static void typed_and_paged_test(void) {
     claim(&a,6,OSG_ACTION_SCOPE_CAN,"out.0",A,500,"-2 off -","\"leaseId\":2");
     state.mismatch=true;snprintf(line,sizeof line,"action release %s 2",A);
     command(&a,7,OSG_ACTION_SCOPE_CAN,line,"\"fallbackStatus\":\"preserved\"");assert(!a.leases[0].owned);state.mismatch=false;
+    /* Atomic capture preserves the complete ordered integer/enum/UTF-8 tuple. */
+    state.value[0].value.integer=3;strcpy(state.value[1].value.text,"on");strcpy(state.value[2].value.text,"\xc3\xa9");
+    snprintf(line,sizeof line,"action claim_current 1 out.0 %s 500",A);command(&a,8,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":3");
+    owned(&a,9,OSG_ACTION_SCOPE_CAN,A,3,"out.0","5 off 4869","\"values\":[5,\"off\",\"Hi\"]");
+    snprintf(line,sizeof line,"action release %s 3",A);command(&a,10,OSG_ACTION_SCOPE_CAN,line,"\"released\":true");
+    assert(state.value[0].value.integer==3 && !strcmp(state.value[1].value.text,"on") && !strcmp(state.value[2].value.text,"\xc3\xa9"));
     /* Valid legacy catalogues can be too wide for owned command envelopes. */
     osg_action_parameter_t wide[3];for(unsigned i=0;i<3;i++){wide[i]=params[2];wide[i].id=params[i].id;}
     d[0].parameters=wide;assert(!osg_actions_init(&a,d,1,1,typed_write,typed_read,&state));
@@ -127,6 +133,53 @@ static void restore_if_unchanged_test(void) {
     snprintf(line,sizeof line,"action release %s 9",A);command(&a,525,OSG_ACTION_SCOPE_CAN,line,"fallbackFailed");assert(!a.leases[0].owned && device.on);
     writes=device.writes;osg_actions_tick(&a,1000);assert(device.writes==writes);
 }
+
+static void capture_at_claim_test(void) {
+    device_t device={0};osg_actions_t a;char line[384];
+    assert(osg_actions_init(&a,descriptors,4,1,invoke,read_value,&device) && osg_actions_enable_ownership(&a));
+    command(&a,0,OSG_ACTION_SCOPE_CAN,"action describe 0","\"fallbackPolicy\":\"capture-at-claim\"");
+    /* The actual value may change after the host's previous read. No stale
+       fallback is supplied by the host, and acquiring the lease writes nothing. */
+    device.on=true;
+    snprintf(line,sizeof line,"action claim_current 1 led.a %s 500",A);
+    command(&a,1,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":1");
+    assert(!device.writes && a.leases[0].fallback[0].value.boolean && a.leases[0].last_owned[0].value.boolean && a.leases[0].captured_fallback);
+    owned(&a,2,OSG_ACTION_SCOPE_CAN,A,1,"led.a","0","\"values\":[false]");
+    command(&a,3,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":1");
+    assert(a.leases[0].fallback[0].value.boolean && !a.leases[0].last_owned[0].value.boolean);
+    /* Duplicate claim does not require/retry a callback or overwrite original
+       capture, including after a failed read or an external endpoint change. */
+    device.fail_read=true;command(&a,4,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":1");device.fail_read=false;
+    char release[96];snprintf(release,sizeof release,"action release %s 1",A);
+    command(&a,5,OSG_ACTION_SCOPE_CAN,release,"\"fallbackStatus\":\"applied\"");assert(device.on && device.writes==2);
+    command(&a,6,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":2");owned(&a,7,OSG_ACTION_SCOPE_CAN,A,2,"led.a","0","\"values\":[false]");
+    device.on=true;command(&a,8,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":2");unsigned writes=device.writes;
+    osg_actions_tick(&a,508);assert(device.on && device.writes==writes && a.leases[0].fallback_status==3);
+    /* Different tokens/scopes/claim shapes may never replace this captured
+       fallback. Shared endpoint one-shots remain under the readable claim. */
+    command(&a,509,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":3");
+    claim(&a,510,OSG_ACTION_SCOPE_CAN,"led.a",A,500,"0","outputBusy");
+    snprintf(line,sizeof line,"action claim_current 1 led.alias %s 500",A);command(&a,511,OSG_ACTION_SCOPE_CAN,line,"outputBusy");
+    snprintf(line,sizeof line,"action claim_current 1 led.a %s 500",B);command(&a,512,OSG_ACTION_SCOPE_CAN,line,"outputBusy");
+    snprintf(line,sizeof line,"action claim_current 1 led.a %s 500",A);command(&a,513,OSG_ACTION_SCOPE_USB,line,"outputBusy");
+    owned(&a,514,OSG_ACTION_SCOPE_CAN,A,3,"pulse","","\"values\":[]");
+    owned(&a,515,OSG_ACTION_SCOPE_CAN,A,3,"led.b","ffffff","outputNotOwned");
+    osg_actions_invalidate_scope(&a,OSG_ACTION_SCOPE_CAN,516);assert(!a.leases[0].owned && device.on);
+    /* Legacy fallback claims keep their original replacement semantics, but
+       cannot be upgraded by reusing a token while the old claim remains live. */
+    claim(&a,517,OSG_ACTION_SCOPE_CAN,"led.a",A,500,"0","\"leaseId\":4");
+    command(&a,518,OSG_ACTION_SCOPE_CAN,line,"outputBusy");osg_actions_invalidate_scope(&a,OSG_ACTION_SCOPE_CAN,519);
+    device.fail_read=true;command(&a,520,OSG_ACTION_SCOPE_CAN,line,"failed");assert(!a.leases[0].owned);device.fail_read=false;
+    const char *bad[]={"action claim_current 1 pulse 00112233-4455-6677-8899-aabbccddeeff 500", "action claim_current 1 led.a 00112233-4455-6677-8899-aabbccddeeff 500 0", "action claim_current 1 led.a bad 500", "action claim_current 2 led.a 00112233-4455-6677-8899-aabbccddeeff 500", "action claim_current 1 missing 00112233-4455-6677-8899-aabbccddeeff 500", "action claim_current 1 led.a 00112233-4455-6677-8899-aabbccddeeff 249"};
+    writes=device.writes;for(size_t i=0;i<sizeof bad/sizeof bad[0];i++){command(&a,521,OSG_ACTION_SCOPE_CAN,bad[i],"\"ok\":false");assert(!a.leases[0].owned && device.writes==writes);}
+    command(&a,522,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":5");device.write_then_fail=true;
+    owned(&a,523,OSG_ACTION_SCOPE_CAN,A,5,"led.a","1","failed");device.write_then_fail=false;assert(!a.leases[0].last_owned_valid);
+    command(&a,524,OSG_ACTION_SCOPE_CAN,line,"\"leaseId\":5");assert(!a.leases[0].last_owned_valid);writes=device.writes;
+    osg_actions_tick(&a,1024);assert(!a.leases[0].owned && a.leases[0].fallback_status==2 && device.writes==writes);
+    a.lease_counter=UINT32_MAX;command(&a,1025,OSG_ACTION_SCOPE_CAN,line,"leaseExhausted");
+    osg_actions_t legacy;assert(osg_actions_init(&legacy,descriptors,4,1,invoke,read_value,&device));command(&legacy,0,OSG_ACTION_SCOPE_CAN,line,"ownershipUnsupported");
+}
+
 int main(void) {
     device_t device={0};osg_actions_t a;assert(osg_actions_init(&a,descriptors,4,1,invoke,read_value,&device));
     assert(!osg_actions_enable_ownership(NULL));osg_actions_t invalid={0};assert(!osg_actions_enable_ownership(&invalid));
@@ -177,6 +230,7 @@ int main(void) {
     osg_actions_invalidate_scope(&a,OSG_ACTION_SCOPE_CAN,1507);
     typed_and_paged_test();
     restore_if_unchanged_test();
+    capture_at_claim_test();
     a.lease_counter=UINT32_MAX;claim(&a,1002,OSG_ACTION_SCOPE_CAN,"led.a",A,500,"0","leaseExhausted");
     osg_actions_tick(NULL,0);osg_actions_invalidate_scope(NULL,OSG_ACTION_SCOPE_CAN,0);
     puts("endpoint aliases, competing transports, independent leases, expiry/wrap/fallback, secret/redaction and stale lease guards passed");
