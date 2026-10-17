@@ -61,3 +61,28 @@ the portable core; the maintained coverage gate requires aggregate coverage abov
 70%. Clear old build coverage data after source edits before measuring. These
 are host software checks; physical USB/CAN, LEDs/displays and live-game behavior
 remain outside this suite.
+
+
+`volatile_publication_ownership` is the seventh portable suite. It tests both
+original enable states, atomic local capture, exact duplicate/lost-reply claims,
+competing owners, renewal, expiry before and after activation, clock wrap and
+backward timestamps, stale publisher/boot/route/config/profile/transition pins,
+32-target layouts, malformed bounds, no-input rejection, counter exhaustion,
+unknown-read attention and restoration cancelled by a newer independent edit.
+It verifies that claim/release only authorize work: actual application and
+restoration require separately fenced readback. No driver, configuration or
+flash callback exists in this primitive.
+
+On 2026-10-17 all seven core suites passed native GNU C and independent clean
+ASan/UBSan builds. The new publication module covered 101/101 executable lines;
+the existing unchanged >70% aggregate gate measured 896/898 (99.78%). These
+software state-machine tests do not qualify USB enumeration or hardware.
+
+An admitted-but-unconfirmed descriptor regression covers actual application with
+lost/delayed confirmation followed by expiry, release and scope loss. Mutating
+`begin_apply` records intent before IO and permits it only once per lease. A
+fresh native read of that exact admitted desired view is a valid restoration
+comparison point even without the earlier confirmation; unknown state retains
+attention. Old completion/begin tickets are fenced after revocation. Separate
+capture tests reuse caller buffers to verify immutable baseline/desired/scope
+copies and last-owned snapshots.

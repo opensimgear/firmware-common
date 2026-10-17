@@ -83,6 +83,47 @@ claims. The command envelope is still 384 bytes and JSON at most 4091 bytes;
 enablement rejects catalogues whose owned commands cannot fit. Legacy products
 that do not enable ownership retain their original command behavior.
 
+## Volatile publication lease primitive
+
+`opensimgear/publication.h` supplies a bounded native state machine for a future
+product-owned temporary HID publication overlay. It does not itself change a
+USB descriptor, advertise a wire capability, write configuration/flash, or make
+an existing product support overrides. Products must integrate its native
+owner/transition fences before advertising that capability.
+
+Initialize once per boot and use one serialized owner for the primitive and
+actual descriptor changes. `claim_current` captures a settled firmware-local
+view of at most 32 exact targets and an immutable desired view, pinned to publisher
+identity, boot, native route generation and each target's configuration/profile
+revision. Only enabled/order may change. An exact duplicate returns the same
+private ticket without recapturing the original or extending its 250–5000 ms lease;
+renewal is explicit. The product's route generation must change whenever its
+underlying epoch/node/lease or USB connection identity changes.
+
+Before activating a queued descriptor transition, call mutating `begin_apply`
+against actual current state in the same non-yielding context. It records the
+one-shot admitted intent before descriptor IO, then `confirm_applied` checks
+actual readback separately. `apply_allowed` alone is only a prospective check
+and never admits IO. If physical application completes but its confirmation is
+lost, a local read matching the exact admitted desired state still permits
+compare-fenced restoration; it never becomes a clean external-edit result. Expiry, explicit release and scope invalidation
+revoke delivery and advance the transition fence before returning. A restore
+result is pending work, not an acknowledgement. `restore_allowed` compares the
+actual view with last-owned state immediately before restoration;
+`confirm_restored` accepts only captured original readback. A later independent
+edit is preserved. Unknown state retains attention and blocks new claims; exact
+existing-lease recovery may reread/release but never reclaim or resume a run.
+Products must discard superseded scheduled transitions and service expiry
+independently of host reads. Clock samples are monotonic modulo 32 bits and must
+be less than half the clock range apart; lease/transition counters never wrap.
+Never serialize the private owner token or complete state machine to a host.
+
+The configured registry and effective USB layout remain separate responsibilities
+of the product adapter. Temporary targets must never pass through its persistent
+configuration writer. Direct USB must also distinguish its own bounded deliberate
+re-enumeration from actual transport loss. Physical USB/CAN and platform
+qualification remain unchanged.
+
 ## Panel input events
 
 `opensimgear/events.h` collects mapped button transitions and encoder detents in a
