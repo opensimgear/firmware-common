@@ -95,7 +95,7 @@ static void base_header(writer_t *w, const osg_actions_t *a) {
 }
 static void header(writer_t *w, const osg_actions_t *a) {
     base_header(w,a);
-    if(a->ownership_enabled) literal(w,",\"ownership\":{\"schemaVersion\":1,\"scope\":\"endpoint\",\"maxLeaseMs\":5000}");
+    if(a->ownership_enabled) literal(w,",\"ownership\":{\"schemaVersion\":1,\"scope\":\"endpoint\",\"maxLeaseMs\":5000,\"restorePolicy\":\"if-unchanged\"}");
 }
 static void values(writer_t *w, const osg_action_value_t *v, size_t count) {
     literal(w,"[");
@@ -278,21 +278,35 @@ bool osg_actions_enable_ownership(osg_actions_t *a) {
     }
     a->ownership_enabled=true;return true;
 }
-static bool fallback(osg_actions_t *a,osg_action_lease_t *lease) {
-    const osg_action_descriptor_t *d=&a->descriptors[lease->action_index];
-    osg_action_value_t v[OSG_ACTION_MAX_PARAMETERS];memcpy(v,lease->fallback,sizeof v);
-    lease->owned=false;memset(lease->token,0,sizeof lease->token);
-    bool ok=a->invoke(a->context,d->id,v,d->parameter_count) &&
-        a->read(a->context,d->id,v,d->parameter_count) && valid_values(d,v);
-    for(size_t i=0;ok && i<d->parameter_count;i++) {
-        const osg_action_value_t *wanted=&lease->fallback[i],*actual=&v[i];
-        switch(wanted->type) {
-        case OSG_ACTION_BOOLEAN:ok=wanted->value.boolean==actual->value.boolean;break;
-        case OSG_ACTION_INTEGER:ok=wanted->value.integer==actual->value.integer;break;
-        case OSG_ACTION_RGB:ok=wanted->value.rgb==actual->value.rgb;break;
-        case OSG_ACTION_ENUM:case OSG_ACTION_STRING:ok=!strcmp(wanted->value.text,actual->value.text);break;
+static bool same_values(const osg_action_descriptor_t *d,const osg_action_value_t *left,const osg_action_value_t *right) {
+    for(size_t i=0;i<d->parameter_count;i++) {
+        if(left[i].type!=right[i].type) return false;
+        switch(left[i].type) {
+        case OSG_ACTION_BOOLEAN:if(left[i].value.boolean!=right[i].value.boolean) return false;break;
+        case OSG_ACTION_INTEGER:if(left[i].value.integer!=right[i].value.integer) return false;break;
+        case OSG_ACTION_RGB:if(left[i].value.rgb!=right[i].value.rgb) return false;break;
+        case OSG_ACTION_ENUM:case OSG_ACTION_STRING:if(strcmp(left[i].value.text,right[i].value.text)) return false;break;
         }
     }
+    return true;
+}
+static const char *fallback_status(const osg_action_lease_t *lease) {
+    return lease->fallback_status==1?"applied":lease->fallback_status==2?"failed":lease->fallback_status==3?"preserved":"none";
+}
+static bool fallback(osg_actions_t *a,osg_action_lease_t *lease) {
+    const osg_action_descriptor_t *d=&a->descriptors[lease->action_index];
+    osg_action_value_t v[OSG_ACTION_MAX_PARAMETERS]={0};
+    bool known=lease->last_owned_valid;
+    lease->owned=false;lease->last_owned_valid=false;memset(lease->token,0,sizeof lease->token);
+    /* No callback may yield to another endpoint writer between this comparison
+     * and invoke: the whole dispatcher shares the product's serialized owner. */
+    if(!known || !a->read(a->context,d->id,v,d->parameter_count) || !valid_values(d,v)) {
+        lease->fallback_status=2;return false;
+    }
+    if(!same_values(d,v,lease->last_owned)) {lease->fallback_status=3;return true;}
+    memcpy(v,lease->fallback,sizeof v);
+    bool ok=a->invoke(a->context,d->id,v,d->parameter_count) &&
+        a->read(a->context,d->id,v,d->parameter_count) && valid_values(d,v) && same_values(d,v,lease->fallback);
     lease->fallback_status=ok?1:2;return ok;
 }
 void osg_actions_tick(osg_actions_t *a,uint32_t now) {
@@ -316,7 +330,7 @@ static osg_action_lease_t *owned(osg_actions_t *a,const char *secret,uint32_t id
 static void lease_reply(writer_t *w,const osg_actions_t *a,const osg_action_lease_t *lease,bool released) {
     header(w,a);literal(w,",\"leaseId\":");number(w,lease->id);
     literal(w,",\"endpoint\":");quoted(w,a->descriptors[lease->action_index].endpoint);
-    if(released) literal(w,",\"released\":true");
+    if(released) {literal(w,",\"released\":true,\"fallbackStatus\":");quoted(w,fallback_status(lease));}
     else {literal(w,",\"remainingMs\":");number(w,(uint32_t)(lease->expires_at-a->now));}
     literal(w,"}");
 }
@@ -327,7 +341,7 @@ static void lease_entry(writer_t *w,const osg_actions_t *a,size_t index) {
     literal(w,",\"owned\":");literal(w,lease->owned?"true":"false");literal(w,",\"leaseId\":");number(w,lease->id);
     literal(w,",\"remainingMs\":");number(w,lease->owned?(uint32_t)(lease->expires_at-a->now):0);
     literal(w,",\"fallback\":");values(w,lease->fallback,lease->id?d->parameter_count:0);
-    literal(w,",\"fallbackStatus\":");quoted(w,lease->fallback_status==1?"applied":lease->fallback_status==2?"failed":"none");literal(w,"}");
+    literal(w,",\"fallbackStatus\":");quoted(w,fallback_status(lease));literal(w,"}");
 }
 bool osg_actions_command_at(osg_actions_t *a, const char *line,uint32_t now,osg_action_scope_t scope,char *reply, size_t capacity) {
     if(!line || strncmp(line,"action",6) || (line[6] && line[6]!=' ' && line[6]!='\t')) return false;
@@ -409,8 +423,11 @@ bool osg_actions_command_at(osg_actions_t *a, const char *line,uint32_t now,osg_
         if(!valid_values(d,v)) {error(reply,capacity,"invalidArgument");return true;}
         osg_action_lease_t *lease=&a->leases[endpoint_index(a,index)];
         if(lease->owned && (strcmp(lease->token,secret) || lease->scope!=scope)) {error(reply,capacity,"outputBusy");return true;}
+        osg_action_value_t current[OSG_ACTION_MAX_PARAMETERS]={0};
+        if(!a->read(a->context,d->id,current,d->parameter_count) || !valid_values(d,current)) {error(reply,capacity,"failed");return true;}
         if(!lease->owned) {if(a->lease_counter==UINT32_MAX) {error(reply,capacity,"leaseExhausted");return true;}lease->id=++a->lease_counter;}
-        strcpy(lease->token,secret);memcpy(lease->fallback,v,sizeof v);lease->scope=scope;lease->owned=true;
+        strcpy(lease->token,secret);memcpy(lease->fallback,v,sizeof v);
+        memcpy(lease->last_owned,current,sizeof current);lease->last_owned_valid=true;lease->scope=scope;lease->owned=true;
         lease->action_index=(uint8_t)index;lease->fallback_status=0;lease->expires_at=now+duration;
         lease_reply(&w,a,lease,false);
     } else if(!strcmp(tokens[1],"invoke") || !strcmp(tokens[1],"invoke_owned")) {
@@ -435,8 +452,17 @@ bool osg_actions_command_at(osg_actions_t *a, const char *line,uint32_t now,osg_
         osg_action_value_t v[OSG_ACTION_MAX_PARAMETERS]={0};
         for(size_t i=0;i<d->parameter_count;++i) if(!parse_value(&d->parameters[i],tokens[base+i],&v[i])) { error(reply,capacity,"invalidArgument"); return true; }
         if(!valid_values(d,v)) { error(reply,capacity,"invalidArgument"); return true; }
+        /* A failed/ambiguous owned mutation cannot later authorize restoring
+         * over state that has not been read back under this same lease. */
+        if(leased) lease->last_owned_valid=false;
         if(!a->invoke(a->context,d->id,v,d->parameter_count) ||
            (d->readable && (!a->read(a->context,d->id,v,d->parameter_count) || !valid_values(d,v)))) { error(reply,capacity,"failed"); return true; }
+        if(leased) {
+            const osg_action_descriptor_t *owner=&a->descriptors[lease->action_index];
+            osg_action_value_t actual[OSG_ACTION_MAX_PARAMETERS]={0};
+            if(!a->read(a->context,owner->id,actual,owner->parameter_count) || !valid_values(owner,actual)) {error(reply,capacity,"failed");return true;}
+            memcpy(lease->last_owned,actual,sizeof actual);lease->last_owned_valid=true;
+        }
         header(&w,a); literal(&w,",\"id\":"); quoted(&w,d->id); literal(&w,",\"values\":"); values(&w,v,d->parameter_count); literal(&w,"}");
     } else { error(reply,capacity,"unknownCommand"); return true; }
     if(w.failed) error(reply,capacity,"replyTooSmall");

@@ -44,14 +44,18 @@ typedef enum { OSG_ACTION_SCOPE_LOCAL, OSG_ACTION_SCOPE_USB, OSG_ACTION_SCOPE_CA
 typedef struct {
     char token[OSG_ACTION_TOKEN_CAPACITY];
     osg_action_value_t fallback[OSG_ACTION_MAX_PARAMETERS];
+    osg_action_value_t last_owned[OSG_ACTION_MAX_PARAMETERS];
     uint32_t id,expires_at;
     uint8_t action_index,fallback_status;
     osg_action_scope_t scope;
-    bool owned;
+    bool owned,last_owned_valid;
 } osg_action_lease_t;
 /* Callbacks run only after complete command and catalogue validation. read must
  * supply one correctly typed value per parameter. A false return is a device
- * failure; it is not a request to retry a one-shot action. */
+ * failure; it is not a request to retry a one-shot action. The registry, tick,
+ * scope invalidation and endpoint state callbacks must run in one serialized,
+ * non-reentrant owner context. This makes compare-before-restore indivisible
+ * with respect to all product writes of the same software endpoint state. */
 typedef bool (*osg_action_invoke_fn)(void *context, const char *id,
                                    const osg_action_value_t *values, size_t count);
 typedef bool (*osg_action_read_fn)(void *context, const char *id,
@@ -84,7 +88,10 @@ bool osg_actions_command(osg_actions_t *, const char *line, char *reply, size_t 
 bool osg_actions_enable_ownership(osg_actions_t *);
 void osg_actions_tick(osg_actions_t *,uint32_t now);
 void osg_actions_invalidate_scope(osg_actions_t *,osg_action_scope_t,uint32_t now);
-/* Expired leases apply their validated fallback independently of reply capacity.
+/* Expired leases compare current state with the last validated owned tuple and
+ * restore only while unchanged, independently of reply capacity. A mismatch
+ * preserves current state and relinquishes ownership; unreadable/uncertain state
+ * never authorizes a fallback write.
  * Explicit commands never invoke callbacks with an undersized reply buffer. */
 bool osg_actions_command_at(osg_actions_t *,const char *line,uint32_t now,osg_action_scope_t,
                             char *reply,size_t capacity);

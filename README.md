@@ -57,9 +57,19 @@ leases and advertises its capability. Products dispatch with
 `osg_actions_invalidate_scope()` on affected transport loss. Secret nonzero UUID
 tokens, endpoint alias exclusion, monotonically increasing lease IDs and
 250–5000 ms TTLs prevent competing writers. Claim stores a fully validated
-readable-setter fallback without applying it. Expiry or release attempts fallback
-once and requires exact software readback; failures remain visible and never
-retry an old fallback over a new owner. Legacy invokes and diagnostics respect
+readable-setter fallback without applying it and captures the actual readable
+endpoint value. Owned invocations refresh that exact tuple using the claimed
+setter, including when an alias invokes the endpoint. Ownership advertises
+`restorePolicy: "if-unchanged"`: release, expiry and transport loss restore only
+when current readable state still equals the last value confirmed under that
+lease. An externally changed value remains untouched and reports
+`fallbackStatus: "preserved"`. Unreadable or uncertain state reports `failed`
+without attempting a fallback. Restoration requires exact software readback;
+failures remain visible and never retry an old fallback over a new owner.
+All registry operations and product writes to the same endpoint state must run
+in one serialized, non-reentrant owner context so comparison and restoration
+cannot interleave with another writer. The bounded last-owned tuples use an
+additional 4,352 bytes per registry at the fixed 16-endpoint/4-argument limits. Legacy invokes and diagnostics respect
 claims. The [wire contract](https://github.com/opensimgear/protocol/blob/main/serial/output-ownership.md)
 defines claim/renew/invoke_owned/release and bounded paged public ownership.
 Tokens never appear in replies. Ownership is volatile and separate from settings
