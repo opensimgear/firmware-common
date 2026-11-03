@@ -60,15 +60,18 @@ osg_event_stream_result_t osg_event_stream_prepare(osg_event_stream_t *s,const o
     }
     bool changed_scope=s->stream!=e->stream;
     if(changed_scope) {
-        return write_frame(s,e,"loss","scopeChanged",e->head,e->head,true,true,now,frame,capacity,length) ?
+        const char *reason=e->exhausted?"streamExhausted":"scopeChanged";
+        return write_frame(s,e,"loss",reason,e->head,e->head,true,true,now,frame,capacity,length) ?
             OSG_EVENT_STREAM_READY : OSG_EVENT_STREAM_FAULT;
     }
     if(s->source_exhausted) return OSG_EVENT_STREAM_IDLE;
+    if(e->exhausted) {
+        return write_frame(s,e,"loss","streamExhausted",e->head,e->head,true,true,now,frame,capacity,length) ?
+            OSG_EVENT_STREAM_READY : OSG_EVENT_STREAM_FAULT;
+    }
     bool gap=s->cursor>e->head || s->cursor<e->head-e->count;
-    bool exhausted=e->exhausted && !s->source_exhausted;
-    if(gap || exhausted) {
-        const char *reason=gap?"eventGap":"streamExhausted";
-        return write_frame(s,e,"loss",reason,e->head,e->head,true,true,now,frame,capacity,length) ?
+    if(gap) {
+        return write_frame(s,e,"loss","eventGap",e->head,e->head,true,true,now,frame,capacity,length) ?
             OSG_EVENT_STREAM_READY : OSG_EVENT_STREAM_FAULT;
     }
     bool axes=axes_changed(s,e),edges=e->head!=s->cursor;

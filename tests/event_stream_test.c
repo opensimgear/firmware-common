@@ -90,20 +90,27 @@ static void loss_and_exhaustion(void) {
     assert(osg_events_init(&events,&panel,&sample,now,13));
     assert(prepare(&stream,&events,now)==OSG_EVENT_STREAM_READY);
     assert(strstr(frame,"\"reason\":\"scopeChanged\"") && strstr(frame,"\"stream\":13"));sent(&stream);
-    events.exhausted=true;assert(prepare(&stream,&events,now+1)==OSG_EVENT_STREAM_READY);
+    osg_events_observe(&events,&sample,now);osg_events_observe(&events,&sample,now+10);now+=20;
+    for(unsigned i=0;i<33;i++) {contact(&events,&sample,&now,true);contact(&events,&sample,&now,false);}
+    assert(events.overflow>0);events.exhausted=true;
+    assert(prepare(&stream,&events,now)==OSG_EVENT_STREAM_READY);
     assert(strstr(frame,"\"reason\":\"streamExhausted\"") && strstr(frame,"\"exhausted\":true") &&
-           strstr(frame,"\"head\":0"));sent(&stream);
-    assert(prepare(&stream,&events,now+2)==OSG_EVENT_STREAM_IDLE);
+           strstr(frame,"\"head\":66"));sent(&stream);
+    assert(prepare(&stream,&events,now+1)==OSG_EVENT_STREAM_IDLE);
     assert(prepare(&stream,&events,now+1000)==OSG_EVENT_STREAM_IDLE);
     assert(!osg_event_stream_start(&stream,&events,33,now+1001));
     assert(osg_events_init(&events,&panel,&sample,now+1001,14));
+    events.exhausted=true; /* An exhausted greater stream must not look recoverable. */
     assert(prepare(&stream,&events,now+1001)==OSG_EVENT_STREAM_READY);
-    assert(strstr(frame,"\"reason\":\"scopeChanged\"") && strstr(frame,"\"stream\":14"));sent(&stream);
-    events.exhausted=true;assert(prepare(&stream,&events,now+1002)==OSG_EVENT_STREAM_READY);
-    assert(strstr(frame,"\"reason\":\"streamExhausted\"") && strstr(frame,"\"exhausted\":true"));sent(&stream);
+    assert(strstr(frame,"\"reason\":\"streamExhausted\"") && strstr(frame,"\"exhausted\":true") &&
+           strstr(frame,"\"stream\":14"));sent(&stream);
     assert(prepare(&stream,&events,now+2000)==OSG_EVENT_STREAM_IDLE);
-    assert(osg_events_init(&events,&panel,&sample,now+2001,15));
-    assert(osg_event_stream_start(&stream,&events,33,now+2001));stream.next_sequence=UINT32_MAX;
+    assert(prepare(&stream,&events,now+5000)==OSG_EVENT_STREAM_IDLE);
+    assert(osg_events_init(&events,&panel,&sample,now+5001,15));
+    assert(prepare(&stream,&events,now+5001)==OSG_EVENT_STREAM_READY);
+    assert(strstr(frame,"\"reason\":\"scopeChanged\"") && strstr(frame,"\"stream\":15"));sent(&stream);
+    assert(osg_events_init(&events,&panel,&sample,now+5002,16));
+    assert(osg_event_stream_start(&stream,&events,33,now+5002));stream.next_sequence=UINT32_MAX;
     assert(prepare(&stream,&events,0)==OSG_EVENT_STREAM_READY);sent(&stream);
     assert(prepare(&stream,&events,100)==OSG_EVENT_STREAM_FAULT);
     osg_event_stream_stop(&stream);assert(prepare(&stream,&events,101)==OSG_EVENT_STREAM_FAULT);

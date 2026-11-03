@@ -16,8 +16,8 @@ current baseline; counter/source exhaustion cannot manufacture healthy updates.
 Local verification uses official LLVM/MinGW 20261020, asset SHA-256
 `fd5462b7f5d93b2ff981fcd3f9c7e427e47f3203c64ea91c27bcc444eebd74cd`.
 All eight native CTest suites pass. Portable core line coverage is
-1,089/1,092 (99.73%); `events.c` is 152/154 (98.70%) and `stream.c` is
-68/68 (100%). Tests include the existing release-to-rearm behavior, ordered
+1,090/1,093 (99.73%); `events.c` is 152/154 (98.70%) and `stream.c` is
+69/69 (100%). Tests include the existing release-to-rearm behavior, ordered
 encoder pairs, capture times, paging, axis watchdog changes, immutable partial
 delivery, overflow, scope replacement, exhaustion and small-buffer failure.
 
