@@ -4,7 +4,7 @@
 
 enum { OSG_EVENTS_RING_CAPACITY=64, OSG_EVENTS_PAGE_SIZE=16,
        OSG_EVENTS_REPLY_CAPACITY=4096, OSG_EVENTS_COMMAND_CAPACITY=384 };
-typedef struct { uint32_t sequence; uint8_t control; bool pressed; } osg_input_event_t;
+typedef struct { uint32_t sequence,captured_at_ms; uint8_t control; bool pressed; } osg_input_event_t;
 /* Product runtime calibrates this independent report, including inversion and
  * deadzone, before axis snapshots are captured. Never pass product HID state. */
 typedef void (*osg_events_transform_fn)(void *context,const osg_profile_state_t *state,
@@ -32,3 +32,5 @@ void osg_events_observe(osg_events_t *,const osg_profile_sample_t *,uint32_t now
 /* Full `events state` / `events read <stream> <after>` command. Reads never
  * consume the ring. Caller retains immutable transport retry responses. */
 bool osg_events_command(const osg_events_t *,const char *,char *reply,size_t capacity);
+/* Current metadata without a cursor, including when the edge sequence is exhausted. */
+bool osg_events_state_snapshot(const osg_events_t *,char *reply,size_t capacity);

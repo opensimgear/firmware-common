@@ -31,7 +31,8 @@ static void append_event(osg_events_t *s,uint8_t control,bool pressed) {
         if(s->overflow<UINT32_MAX) s->overflow++;
     } else s->count++;
     unsigned index=(s->start+s->count-1)%OSG_EVENTS_RING_CAPACITY;
-    s->ring[index]=(osg_input_event_t){.sequence=++s->head,.control=control,.pressed=pressed};
+    s->ring[index]=(osg_input_event_t){.sequence=++s->head,.captured_at_ms=s->sampled_at,
+        .control=control,.pressed=pressed};
 }
 void osg_events_observe(osg_events_t *s,const osg_profile_sample_t *sample,uint32_t now) {
     if(!s || !s->valid || s->exhausted || !sample) return;
@@ -148,10 +149,20 @@ bool osg_events_command(const osg_events_t *s,const char *line,char *reply,size_
         unsigned offset=(unsigned)(after-(s->head-s->count));
         for(unsigned i=0;i<amount;i++) {
             const osg_input_event_t *event=&s->ring[(s->start+offset+i)%OSG_EVENTS_RING_CAPACITY];
-            writef(&w,"%s{\"sequence\":%lu,\"control\":%u,\"pressed\":%s}",i?",":"",
-                (unsigned long)event->sequence,event->control,event->pressed?"true":"false");
+            writef(&w,"%s{\"sequence\":%lu,\"control\":%u,\"pressed\":%s,\"capturedAtMs\":%lu}",i?",":"",
+                (unsigned long)event->sequence,event->control,event->pressed?"true":"false",
+                (unsigned long)event->captured_at_ms);
         }
         writef(&w,"]");
     }
     writef(&w,"}");if(w.failed) error(reply,capacity,"replyTooSmall");return true;
+}
+
+bool osg_events_state_snapshot(const osg_events_t *s,char *reply,size_t capacity) {
+    if(!s || !s->valid || !reply || capacity<OSG_EVENTS_REPLY_CAPACITY) {
+        error(reply,capacity,!s || !s->valid?"invalidStream":"replyTooSmall");return false;
+    }
+    writer_t w={.out=reply,.capacity=capacity-1};metadata(&w,s);writef(&w,"}");
+    if(w.failed) {error(reply,capacity,"replyTooSmall");return false;}
+    return true;
 }
