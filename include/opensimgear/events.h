@@ -29,6 +29,24 @@ bool osg_events_init(osg_events_t *,const osg_profile_t *,const osg_profile_samp
 void osg_events_set_transform(osg_events_t *,osg_events_transform_fn,void *context);
 /* Sample independently of direct USB, disabled HID, leases and InputAck. */
 void osg_events_observe(osg_events_t *,const osg_profile_sample_t *,uint32_t now);
+typedef enum {
+    OSG_EVENTS_READ_OK,
+    OSG_EVENTS_READ_INVALID_STREAM,
+    OSG_EVENTS_READ_EXHAUSTED,
+    OSG_EVENTS_READ_STALE_STREAM,
+    OSG_EVENTS_READ_INVALID_CURSOR,
+    OSG_EVENTS_READ_GAP
+} osg_events_read_result_t;
+typedef struct {
+    uint32_t next;
+    uint8_t count;
+    bool more;
+    osg_input_event_t entries[OSG_EVENTS_PAGE_SIZE];
+} osg_events_page_t;
+/* Copy an ordered page without consuming input or changing the caller's cursor.
+ * A failure leaves the output untouched. Call on the acquisition owner. */
+osg_events_read_result_t osg_events_read_page(const osg_events_t *,uint32_t stream,
+    uint32_t after,osg_events_page_t *);
 /* Full `events state` / `events read <stream> <after>` command. Reads never
  * consume the ring. Caller retains immutable transport retry responses. */
 bool osg_events_command(const osg_events_t *,const char *,char *reply,size_t capacity);

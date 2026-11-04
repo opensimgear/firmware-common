@@ -116,6 +116,24 @@ static void metadata(writer_t *w,const osg_events_t *s) {
     for(unsigned i=0;i<p->axis_count;i++) writef(w,"%s%s",i?",":"",(s->acquisition.axis_available&(1U<<i))?"true":"false");
     writef(w,"],\"sampledAtMs\":%lu",(unsigned long)s->sampled_at);
 }
+osg_events_read_result_t osg_events_read_page(const osg_events_t *s,uint32_t stream,
+    uint32_t after,osg_events_page_t *page) {
+    if(!s || !s->valid || !page) return OSG_EVENTS_READ_INVALID_STREAM;
+    if(s->exhausted) return OSG_EVENTS_READ_EXHAUSTED;
+    if(stream!=s->stream) return OSG_EVENTS_READ_STALE_STREAM;
+    if(after>s->head) return OSG_EVENTS_READ_INVALID_CURSOR;
+    uint32_t floor=s->head-s->count;
+    if(after<floor) return OSG_EVENTS_READ_GAP;
+
+    uint32_t remaining=s->head-after;
+    uint8_t count=remaining>OSG_EVENTS_PAGE_SIZE?OSG_EVENTS_PAGE_SIZE:(uint8_t)remaining;
+    *page=(osg_events_page_t){.next=after+count,.count=count,.more=count<remaining};
+    unsigned offset=(unsigned)(after-floor);
+    for(unsigned i=0;i<count;i++)
+        page->entries[i]=s->ring[(s->start+offset+i)%OSG_EVENTS_RING_CAPACITY];
+    return OSG_EVENTS_READ_OK;
+}
+
 bool osg_events_command(const osg_events_t *s,const char *line,char *reply,size_t capacity) {
     if(!line || strncmp(line,"events",6) || (line[6] && line[6]!=' ' && line[6]!='\t')) return false;
     if(!s || !s->valid) {error(reply,capacity,"invalidStream");return true;}
@@ -133,22 +151,22 @@ bool osg_events_command(const osg_events_t *s,const char *line,char *reply,size_
     }
     bool reading=count>=2 && !strcmp(tokens[1],"read");
     uint32_t stream=0,after=0;
+    osg_events_page_t page;
     if(reading) {
         if(count!=4 || !number(tokens[2],&stream) || !number(tokens[3],&after)) {error(reply,capacity,"invalidArgument");return true;}
-        if(stream!=s->stream) {error(reply,capacity,"staleStream");return true;}
-        if(after>s->head) {error(reply,capacity,"invalidCursor");return true;}
-        if(after<s->head-s->count) {error(reply,capacity,"eventGap");return true;}
+        osg_events_read_result_t result=osg_events_read_page(s,stream,after,&page);
+        if(result!=OSG_EVENTS_READ_OK) {
+            const char *reason=result==OSG_EVENTS_READ_STALE_STREAM?"staleStream":
+                result==OSG_EVENTS_READ_INVALID_CURSOR?"invalidCursor":"eventGap";
+            error(reply,capacity,reason);return true;
+        }
     } else if(count!=2 || strcmp(tokens[1],"state")) {error(reply,capacity,"unknownCommand");return true;}
     writer_t w={.out=reply,.capacity=OSG_EVENTS_REPLY_CAPACITY-4};metadata(&w,s);
     if(reading) {
-        uint32_t remaining=s->head-after;
-        unsigned amount=remaining>OSG_EVENTS_PAGE_SIZE?OSG_EVENTS_PAGE_SIZE:(unsigned)remaining;
-        uint32_t next=after+amount;
         writef(&w,",\"after\":%lu,\"next\":%lu,\"more\":%s,\"events\":[",
-            (unsigned long)after,(unsigned long)next,next<s->head?"true":"false");
-        unsigned offset=(unsigned)(after-(s->head-s->count));
-        for(unsigned i=0;i<amount;i++) {
-            const osg_input_event_t *event=&s->ring[(s->start+offset+i)%OSG_EVENTS_RING_CAPACITY];
+            (unsigned long)after,(unsigned long)page.next,page.more?"true":"false");
+        for(unsigned i=0;i<page.count;i++) {
+            const osg_input_event_t *event=&page.entries[i];
             writef(&w,"%s{\"sequence\":%lu,\"control\":%u,\"pressed\":%s,\"capturedAtMs\":%lu}",i?",":"",
                 (unsigned long)event->sequence,event->control,event->pressed?"true":"false",
                 (unsigned long)event->captured_at_ms);

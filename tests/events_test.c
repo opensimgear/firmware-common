@@ -112,6 +112,23 @@ int main(void) {
     assert(events.head==62);
     for(unsigned i=0;i<4;i++) detent(&events,&sample,500+4*i,false);
     assert(events.head==70 && events.count==64 && events.overflow==6);
+    osg_events_page_t page;
+    assert(osg_events_read_page(&events,1,6,&page)==OSG_EVENTS_READ_OK);
+    assert(page.count==16 && page.next==22 && page.more);
+    for(unsigned i=0;i<page.count;i++) {
+        const osg_input_event_t *original=&events.ring[(events.start+i)%OSG_EVENTS_RING_CAPACITY];
+        assert(page.entries[i].sequence==7+i);
+        assert(page.entries[i].captured_at_ms==original->captured_at_ms);
+        assert(page.entries[i].control==original->control && page.entries[i].pressed==original->pressed);
+    }
+    assert(osg_events_read_page(&events,1,5,&page)==OSG_EVENTS_READ_GAP);
+    assert(osg_events_read_page(&events,2,6,&page)==OSG_EVENTS_READ_STALE_STREAM);
+    assert(osg_events_read_page(&events,1,71,&page)==OSG_EVENTS_READ_INVALID_CURSOR);
+    assert(osg_events_read_page(NULL,1,6,&page)==OSG_EVENTS_READ_INVALID_STREAM);
+    assert(osg_events_read_page(&events,1,6,NULL)==OSG_EVENTS_READ_INVALID_STREAM);
+    assert(page.next==22 && page.count==16);
+    assert(osg_events_read_page(&events,1,70,&page)==OSG_EVENTS_READ_OK);
+    assert(page.next==70 && page.count==0 && !page.more);
     command(&events,"events state","\"oldest\":7,\"overflow\":6");
     command(&events,"events read 1 5","eventGap");command(&events,"events read 1 6","\"sequence\":7");
     events.overflow=UINT32_MAX-1U;detent(&events,&sample,600,false);assert(events.overflow==UINT32_MAX);
@@ -119,6 +136,7 @@ int main(void) {
     assert(osg_events_init(&events,&profile,&sample,700,2));
     command(&events,"events read 1 70","staleStream");command(&events,"events read 2 70","invalidCursor");
     events.head=UINT32_MAX-1U;detent(&events,&sample,710,false);assert(events.exhausted && events.count==0);
+    assert(osg_events_read_page(&events,2,0,&page)==OSG_EVENTS_READ_EXHAUSTED);
     command(&events,"events state","streamExhausted");osg_events_observe(&events,&sample,900);
     assert(osg_events_init(&events,&profile,&sample,0,3));osg_events_observe(&events,&sample,10);
     events.head=UINT32_MAX;contact(&events,&sample,20,true);assert(events.exhausted);
